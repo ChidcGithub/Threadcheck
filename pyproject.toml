@@ -31,6 +31,9 @@ BugTracker = "https://github.com/ChidcGithub/Threadcheck/issues"
 [project.scripts]
 threadcheck = "threadcheck.cli:main"
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.hatch.version]
 path = "src/threadcheck/_version.py"
 
