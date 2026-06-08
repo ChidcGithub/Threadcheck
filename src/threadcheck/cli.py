@@ -16,7 +16,7 @@ def main():
     )
 
     parser.add_argument(
-        "--version", action="version", version=f"threadcheck 0.1.0"
+        "--version", action="version", version=f"threadcheck 0.0.0"
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
