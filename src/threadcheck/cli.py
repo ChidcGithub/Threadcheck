@@ -3,6 +3,7 @@ import json
 import sys
 from pathlib import Path
 
+from ._version import __version__
 from .static.analyzer import analyze_path
 from .reporting.formatter import format_report
 from .dynamic.__main__ import run_script
@@ -16,7 +17,7 @@ def main():
     )
 
     parser.add_argument(
-        "--version", action="version", version=f"threadcheck 0.0.0"
+        "--version", action="version", version=f"threadcheck {__version__}"
     )
 
     sub = parser.add_subparsers(dest="command", required=True)

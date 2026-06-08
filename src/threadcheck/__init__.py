@@ -7,7 +7,7 @@ threadcheck — Python 并发竞态检测器
 Python 3.14+ Free-Threading 专用工具。
 """
 
-__version__ = "0.0.0"
+from ._version import __version__
 
 from .static.analyzer import analyze_path, analyze_file
 from .static.models import RaceWarning, Severity, WarningCategory
