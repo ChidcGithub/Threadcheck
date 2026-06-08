@@ -138,6 +138,41 @@ ThreadCheckTracker.reset()
 
 ---
 
+## 项目结构
+
+```
+threadcheck/
+├── pyproject.toml
+├── src/
+│   └── threadcheck/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── _version.py          # 版本唯一来源
+│       ├── cli.py               # 参数解析与调度
+│       ├── static/
+│       │   ├── analyzer.py      # 静态分析入口
+│       │   ├── visitors.py      # AST 遍历器
+│       │   ├── lock_tracker.py  # 锁使用分析
+│       │   └── models.py        # 数据模型
+│       ├── dynamic/
+│       │   ├── __main__.py      # 动态检测入口
+│       │   ├── transform.py     # AST 变换引擎
+│       │   ├── tracker.py       # 运行时追踪器
+│       │   ├── clock.py         # 向量时钟
+│       │   └── hook.py          # import hook
+│       ├── reporting/
+│       │   ├── formatter.py     # 输出格式化
+│       │   └── types.py         # 类型重导出
+│       └── pytest_plugin.py     # pytest 集成（计划中）
+├── tests/
+│   ├── fixtures/                # 含已知 race 的测试样本
+│   ├── test_static_analyzer.py
+│   └── test_dynamic_detector.py
+└── README.md / README_CN.md
+```
+
+---
+
 ## 架构
 
 ### 静态分析流程
