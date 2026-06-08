@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "threadcheck"
 dynamic = ["version"]
-description = "Python 并发竞态检测器 (Data Race Detector for Free-Threading Python)"
+description = "Data Race Detector for Free-Threading Python"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
