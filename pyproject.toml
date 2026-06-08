@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "threadcheck"
+version = "0.1.0"
+description = "Python 并发竞态检测器 (Data Race Detector for Free-Threading Python)"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "threadcheck contributors"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Debuggers",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/threadcheck"
+Source = "https://github.com/your-username/threadcheck"
+BugTracker = "https://github.com/your-username/threadcheck/issues"
+
+[project.scripts]
+threadcheck = "threadcheck.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/threadcheck"]
