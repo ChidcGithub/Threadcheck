@@ -29,6 +29,22 @@ def test_transform_injects_lock_acquire():
     assert "_threadcheck_tracker.lock_release" in result
 
 
+def _exec_in_module(code, filename):
+    """Execute compiled code in a synthetic module so that defined
+    functions always have the correct ``__globals__``."""
+    import sys
+    import types
+
+    mod = types.ModuleType("_test_dynamic_module")
+    mod.__file__ = filename
+    mod._threadcheck_tracker = ThreadCheckTracker
+    sys.modules["_test_dynamic_module"] = mod
+    try:
+        exec(code, mod.__dict__)
+    finally:
+        sys.modules.pop("_test_dynamic_module", None)
+
+
 def test_detect_race_dynamic():
     source = (FIXTURES / "dynamic_race.py").read_text(encoding="utf-8")
     filename = str(FIXTURES / "dynamic_race.py")
@@ -40,7 +56,7 @@ def test_detect_race_dynamic():
 
     ThreadCheckTracker.start()
     try:
-        exec(code, {"_threadcheck_tracker": ThreadCheckTracker})
+        _exec_in_module(code, filename)
     finally:
         ThreadCheckTracker.stop()
 
@@ -61,7 +77,7 @@ def test_no_race_when_locked():
 
     ThreadCheckTracker.start()
     try:
-        exec(code, {"_threadcheck_tracker": ThreadCheckTracker})
+        _exec_in_module(code, filename)
     finally:
         ThreadCheckTracker.stop()
 
