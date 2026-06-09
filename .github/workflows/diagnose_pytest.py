@@ -123,13 +123,41 @@ if not races:
     import threading as _th
     _plain_results = []
     _plain_lock = _th.Lock()
+    _started_tids = []
+    _started_nids = []
     def _plain_worker():
         with _plain_lock:
             _plain_results.append(_th.get_ident())
     _plain_threads = [_th.Thread(target=_plain_worker) for _ in range(3)]
-    for _t in _plain_threads: _t.start()
-    for _t in _plain_threads: _t.join()
-    print(f"  plain_threads_work: {len(set(_plain_results))} unique tids: {set(_plain_results)}")
+    _started_tids = [t.ident for t in _plain_threads]
+    for _t in _plain_threads:
+        _t.start()
+        _started_nids.append(_t.native_id)
+    for _t in _plain_threads:
+        _t.join()
+    print(f"  before_start_tids: {_started_tids}", flush=True)
+    print(f"  after_start_nids: {_started_nids}", flush=True)
+    print(f"  after_join_results: {_plain_results}", flush=True)
+    print(f"  unique_worker_tids: {set(_plain_results)}", flush=True)
+    # Run without closures (top-level import approach)
+    _simple_results2 = []
+    def _simple_worker2():
+        _simple_results2.append(1)
+    _simple_threads2 = [_th.Thread(target=_simple_worker2) for _ in range(3)]
+    for _t in _simple_threads2: _t.start()
+    for _t in _simple_threads2: _t.join()
+    print(f"  closure_worker_count: {len(_simple_results2)} values={_simple_results2}", flush=True)
+    # Absolute simplest: function that takes no closures
+    _worker3_results = []
+    import builtins
+    class _Worker3State:
+        results = _worker3_results
+    def _worker3():
+        _Worker3State.results.append(_th.get_ident())
+    _threads3 = [_th.Thread(target=_worker3) for _ in range(3)]
+    for _t in _threads3: _t.start()
+    for _t in _threads3: _t.join()
+    print(f"  class_attr_results: {_worker3_results}", flush=True)
 
 ThreadCheckTracker.reset()
 uninstall_hook(hook)
