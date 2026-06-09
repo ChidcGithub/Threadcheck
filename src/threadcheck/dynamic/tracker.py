@@ -52,6 +52,10 @@ class ThreadCheckTracker:
             location=(file, line),
         )
         with cls._lock:
+            if len(cls._access_log[var_name]) < 3:
+                import sys
+                print(f"[DBG_write] tid={tid} var={var_name} line={line}",
+                      file=sys.stderr, flush=True)
             cls._access_log[var_name].append(record)
 
     @classmethod
