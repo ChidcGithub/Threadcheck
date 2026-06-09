@@ -47,8 +47,14 @@ def pytest_runtest_call(item):
         ThreadCheckTracker.reset_logs()
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_teardown(item, nextitem):
-    report = getattr(item, "_threadcheck_race_report", None)
-    if report:
-        pytest.fail(report)
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    if call.when == "call" and not call.excinfo:
+        report = getattr(item, "_threadcheck_race_report", None)
+        if report:
+            from _pytest._code import ExceptionInfo
+            try:
+                raise pytest.fail.Exception(report)
+            except pytest.fail.Exception:
+                call.excinfo = ExceptionInfo.from_current()
+    yield
