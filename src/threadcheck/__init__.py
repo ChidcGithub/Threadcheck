@@ -1,10 +1,10 @@
 """
-threadcheck — Python 并发竞态检测器
+threadcheck — Data-race detector for multi-threaded Python.
 
-检测多线程代码中的 data race (竞态条件)，
-支持 AST 静态分析和运行时动态检测。
+Supports both AST-based static analysis and runtime dynamic
+detection via bytecode instrumentation.
 
-Python 3.14+ Free-Threading 专用工具。
+Targets Python 3.14+ free-threading builds.
 """
 
 from ._version import __version__

@@ -9,7 +9,7 @@ from .transform import TrackInjector
 def run_script(script_path: str):
     path = Path(script_path).resolve()
     if not path.exists():
-        print(f"文件不存在: {path}", file=sys.stderr)
+        print(f"File not found: {path}", file=sys.stderr)
         sys.exit(1)
 
     source = path.read_text(encoding="utf-8")
@@ -18,7 +18,7 @@ def run_script(script_path: str):
     try:
         tree = ast.parse(source, filename=filename)
     except SyntaxError as e:
-        print(f"语法错误: {e}", file=sys.stderr)
+        print(f"Syntax error: {e}", file=sys.stderr)
         sys.exit(1)
 
     TrackInjector(filename=filename).transform(tree)

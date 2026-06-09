@@ -45,8 +45,8 @@ class GlobalVisitor(ast.NodeVisitor):
                     col=node.col_offset,
                     severity=Severity.WARNING,
                     category=WarningCategory.UNSAFE_GLOBAL,
-                    message=f"全局变量 `{node.id}` 在多线程中无锁修改",
-                    suggestion=f"使用 `threading.Lock()` 保护 `{node.id}` 的访问",
+                    message=f"Global variable `{node.id}` modified without lock",
+                    suggestion=f"Use `threading.Lock()` to protect `{node.id}`",
                     confidence=confidence,
                 )
             )
@@ -105,8 +105,8 @@ class NonlocalVisitor(ast.NodeVisitor):
                     col=node.col_offset,
                     severity=Severity.WARNING,
                     category=WarningCategory.UNSAFE_NONLOCAL,
-                    message=f"nonlocal 变量 `{node.id}` 在多线程中无锁修改",
-                    suggestion=f"使用 `threading.Lock()` 保护 `{node.id}` 的访问",
+                    message=f"Nonlocal variable `{node.id}` modified without lock",
+                    suggestion=f"Use `threading.Lock()` to protect `{node.id}`",
                     confidence=confidence,
                 )
             )
@@ -158,8 +158,8 @@ class ThreadVisitor(ast.NodeVisitor):
                         col=node.col_offset,
                         severity=Severity.INFO,
                         category=WarningCategory.THREAD_USAGE,
-                        message=f"检测到线程创建{label}",
-                        suggestion="确保线程函数中的共享变量访问有锁保护",
+                        message=f"Thread creation detected{label}",
+                        suggestion="Ensure shared variable access in thread functions is lock-protected",
                         confidence=Confidence.LOW,
                     )
                 )
@@ -196,9 +196,9 @@ class SharedMutableVisitor(ast.NodeVisitor):
         if self.context.is_protected(node.lineno):
             return
         confidence = _calc_confidence(self.context, self._current_func)
-        msg = f"模块级可变对象 `{var_name}` 在函数中被修改"
+        msg = f"Module-level mutable object `{var_name}` modified inside function"
         if detail:
-            msg = f"模块级可变对象 `{detail}` 在多线程中调用"
+            msg = f"Module-level mutable object `{detail}` called from multiple threads"
         self.warnings.append(
             RaceWarning(
                 file=self.filepath,
@@ -207,7 +207,7 @@ class SharedMutableVisitor(ast.NodeVisitor):
                 severity=Severity.WARNING,
                 category=WarningCategory.SHARED_MUTABLE,
                 message=msg,
-                suggestion="考虑使用线程安全的数据结构或加锁保护",
+                suggestion="Consider using thread-safe data structures or add lock protection",
                 confidence=confidence,
             )
         )
@@ -288,10 +288,10 @@ class ClassAttributeVisitor(ast.NodeVisitor):
                 severity=Severity.WARNING,
                 category=WarningCategory.CLASS_ATTRIBUTE,
                 message=(
-                    f"类 `{self._current_class}` 的属性 `{attr_name}` "
-                    f"在方法 `{self._current_method}` 中无锁修改"
+                    f"Attribute `{attr_name}` of class `{self._current_class}` "
+                    f"modified without lock in method `{self._current_method}`"
                 ),
-                suggestion="使用 `threading.Lock()` 保护类属性访问",
+                suggestion="Use `threading.Lock()` to protect class attribute access",
                 confidence=confidence,
             )
         )

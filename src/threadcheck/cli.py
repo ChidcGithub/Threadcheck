@@ -12,8 +12,7 @@ from .dynamic.__main__ import run_script
 def main():
     parser = argparse.ArgumentParser(
         prog="threadcheck",
-        description="Python 并发竞态检测器 (Data Race Detector)",
-        epilog="更多信息: https://github.com/your-username/threadcheck",
+        description="Data Race Detector for Python",
     )
 
     parser.add_argument(
@@ -22,16 +21,16 @@ def main():
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    scan = sub.add_parser("scan", help="静态分析代码中的竞态条件")
-    scan.add_argument("path", help="文件或目录路径")
-    scan.add_argument("--json", action="store_true", help="以 JSON 格式输出")
-    scan.add_argument("-o", "--output", help="输出到文件 (默认 stdout)")
+    scan = sub.add_parser("scan", help="Static analysis for data races")
+    scan.add_argument("path", help="File or directory to scan")
+    scan.add_argument("--json", action="store_true", help="Output in JSON format")
+    scan.add_argument("-o", "--output", help="Write output to file (default: stdout)")
 
-    run = sub.add_parser("run", help="动态检测竞态条件 (Phase 3)")
-    run.add_argument("script", help="要执行的 Python 脚本")
+    run = sub.add_parser("run", help="Dynamic race detection (Phase 3)")
+    run.add_argument("script", help="Python script to execute")
 
-    compat = sub.add_parser("check-compat", help="检查 Free-Threading 兼容性 (Phase 7)")
-    compat.add_argument("path", nargs="?", default=".", help="项目路径")
+    compat = sub.add_parser("check-compat", help="Check free-threading compatibility (Phase 7)")
+    compat.add_argument("path", nargs="?", default=".", help="Project path")
 
     args = parser.parse_args()
 
@@ -40,17 +39,17 @@ def main():
     elif args.command == "run":
         run_script(args.script)
     elif args.command == "check-compat":
-        print("尚未实现: Free-Threading 兼容检查 (Phase 7)", file=sys.stderr)
+        print("Not implemented: free-threading compatibility check (Phase 7)", file=sys.stderr)
         sys.exit(1)
 
 
 def _do_scan(args):
     path = Path(args.path).resolve()
     if not path.exists():
-        print(f"路径不存在: {path}", file=sys.stderr)
+        print(f"Path does not exist: {path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"threadcheck scan -- 分析 {path}")
+    print(f"threadcheck scan -- analysing {path}")
     print()
 
     warnings = analyze_path(str(path))
@@ -76,7 +75,7 @@ def _do_scan(args):
             print(text)
 
     print()
-    print(f"总计: {total} 个问题 (错误 {errors}, 警告 {warns}, 信息 {infos})")
+    print(f"Total: {total} issue(s) ({errors} error(s), {warns} warning(s), {infos} info)")
 
 
 if __name__ == "__main__":

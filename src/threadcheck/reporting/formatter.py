@@ -15,7 +15,7 @@ _SEVERITY_TAG = {
 
 def format_report(warnings: list[RaceWarning]) -> str:
     if not warnings:
-        return "未检测到竞态条件问题"
+        return "No data-race issues detected"
 
     lines: list[str] = []
 
@@ -27,7 +27,7 @@ def format_report(warnings: list[RaceWarning]) -> str:
         )
         lines.append(f"       {w.message}")
         if w.suggestion:
-            lines.append(f"       建议: {w.suggestion}")
+            lines.append(f"       suggestion: {w.suggestion}")
         lines.append("")
 
     return "\n".join(lines)
