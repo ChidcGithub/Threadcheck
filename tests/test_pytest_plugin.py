@@ -133,13 +133,29 @@ def test_hook_includes_path():
     runner = _helper_path("check_hook.py")
     runner.write_text(
         textwrap.dedent(f"""\
-            import sys
+            import sys, os
             sys.path.insert(0, {str(mod.parent)!r})
             from threadcheck.dynamic.hook import install_hook, uninstall_hook
             from pathlib import Path
             install_hook(include_paths=[Path({str(PROJECT_ROOT)!r})])
+
+            # Attempt import via the hook
             import dummy_mod
             ok = hasattr(dummy_mod, "_threadcheck_tracker")
+            if not ok:
+                # Fallback: import via default PathFinder (our hook rejected it)
+                # Remove our hook from meta_path and check if import works
+                print("HOOK_IMPORT_FAILED", flush=True)
+                print(f"sys.meta_path[0]={{type(sys.meta_path[0]).__name__}}", flush=True)
+                import importlib
+                spec = importlib.util.spec_from_file_location(
+                    "dummy_mod2", {str(mod)!r}
+                )
+                if spec:
+                    print(f"spec.origin={{spec.origin}}", flush=True)
+                # Check sys.path
+                print(f"sys.path[0]={{sys.path[0]}}", flush=True)
+
             uninstall_hook(sys.meta_path[0] if sys.meta_path else None)
             sys.exit(0 if ok else 1)
         """),
@@ -149,6 +165,8 @@ def test_hook_includes_path():
         [sys.executable, str(runner)],
         capture_output=True, text=True, timeout=10,
     )
+    print(f"[debug] hook_includes_path stdout:\n{result.stdout}")
+    print(f"[debug] hook_includes_path stderr:\n{result.stderr}")
     assert result.returncode == 0, (
         f"Hook did not inject _threadcheck_tracker into helper module.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
