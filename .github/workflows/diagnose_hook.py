@@ -1,5 +1,9 @@
-"""Diagnose import hook pipeline on this Python version."""
+"""Diagnose import hook pipeline on this Python version.
 
+Tests:
+1. Direct import through hook (proven to work)
+2. Import via spec_from_file_location (mimics pytest import_path)
+"""
 import sys
 import textwrap
 from pathlib import Path
@@ -9,14 +13,12 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "src"))
 
 print(f"Python: {sys.version}")
-print(f"sys.path[0]: {sys.path[0]}")
-print(f"sys.path[1]: {sys.path[1]}")
 
-# Step 1: create a helper module
+# ── prepare helpers ──────────────────────────────────────────────
 tmp_dir = REPO / "tmp_diagnose"
 tmp_dir.mkdir(exist_ok=True)
-helper = tmp_dir / "diagnose_mod.py"
-helper.write_text(
+
+(new_module := tmp_dir / "diagnose_mod.py").write_text(
     textwrap.dedent("""\
         import threading
         counter = 0
@@ -35,77 +37,89 @@ helper.write_text(
     encoding="utf-8",
 )
 
-# Step 2: install hook
+(new_test := tmp_dir / "test_diag.py").write_text(
+    textwrap.dedent("""\
+        import sys; print(f"[diag] sys.path={sys.path[:3]}", flush=True)
+        print("[diag] importing diagnose_mod", flush=True)
+        sys.path.insert(0, __file__ and str(type(__file__)))
+        import diagnose_mod
+        _h = hasattr(diagnose_mod, "_threadcheck_tracker")
+        print(f"[diag] has_tracker={_h}", flush=True)
+        def test_diag():
+            diagnose_mod.run_racy()
+    """),
+    encoding="utf-8",
+)
+
 sys.path.insert(0, str(tmp_dir))
-from threadcheck.dynamic.hook import install_hook, uninstall_hook, ThreadCheckFinder, ThreadCheckLoader
+
+from threadcheck.dynamic.hook import install_hook, uninstall_hook
 from threadcheck.dynamic.tracker import ThreadCheckTracker
-
-hook = install_hook(include_paths=[REPO])
-print(f"\n--- Hook installed: {type(hook).__name__} ---")
-print(f"include_paths: {[str(p) for p in hook._include_paths]}")
-print(f"sys.meta_path[0]: {type(sys.meta_path[0]).__name__}")
-
-# Step 3: check _should_instrument
-print(f"\n--- _should_instrument ---")
-for p in [helper, REPO / "setup.py", REPO / "tmp_diagnose" / "nonexistent.py"]:
-    exists = p.exists()
-    should = hook._should_instrument(p)
-    print(f"  {p} exists={exists} should_instrument={should}")
-
-# Step 4: try import through hook
-print(f"\n--- Import through hook ---")
-print(f"  Calling find_spec('diagnose_mod', None, None)")
-spec = hook.find_spec("diagnose_mod", None, None)
-if spec is None:
-    print("  find_spec returned None!")
-else:
-    print(f"  spec.name: {spec.name}")
-    print(f"  spec.origin: {spec.origin}")
-    print(f"  spec.loader: {type(spec.loader).__name__}")
-    print(f"  spec.has_location: {spec.has_location}")
-    if hasattr(spec, "_set_fileattr"):
-        print(f"  spec._set_fileattr: {spec._set_fileattr}")
-
-# Step 5: load module through importlib
-print(f"\n--- Full import ---")
 import importlib.util
-mod = importlib.util.module_from_spec(spec)
-sys.modules["diagnose_mod"] = mod
-print(f"  module created: {type(mod).__name__}")
-print(f"  module.__file__ before exec_module: {mod.__file__}")
-print(f"  module.__dict__ keys before: {[k for k in mod.__dict__.keys() if not k.startswith('__')]}")
 
-ThreadCheckTracker.start()
+
+# ── Test A: direct import (like diagnose_hook did before) ────────
+print("\n=== Test A: direct import through hook ===")
+hook = install_hook(include_paths=[REPO])
 try:
-    spec.loader.exec_module(mod)
-    print(f"  module.__file__ after exec_module: {mod.__file__}")
-    print(f"  module has _threadcheck_tracker: {'_threadcheck_tracker' in mod.__dict__}")
-    if "_threadcheck_tracker" in mod.__dict__:
-        t = mod.__dict__["_threadcheck_tracker"]
-        print(f"  tracker type: {type(t).__name__}")
-        print(f"  tracker is ThreadCheckTracker class: {t is ThreadCheckTracker}")
-        print(f"  ThreadCheckTracker._active: {ThreadCheckTracker._active}")
-    print(f"  module has run_racy: {hasattr(mod, 'run_racy')}")
-
-    # Step 6: run the race
-    print(f"\n--- Run race ---")
-    ThreadCheckTracker.reset_logs()
-    mod.run_racy()
-    races = ThreadCheckTracker.detect_races()
-    print(f"  races detected: {len(races)}")
-    for var, r1, r2 in races:
-        loc1 = f"{r1.location[0]}:{r1.location[1]}"
-        loc2 = f"{r2.location[0]}:{r2.location[1]}"
-        print(f"  race: {var} (T{r1.thread_id} {r1.operation}@{loc1} vs T{r2.thread_id} {r2.operation}@{loc2})")
-    if not races:
-        print(f"  access_log keys: {list(ThreadCheckTracker._access_log.keys())}")
-        for var, recs in ThreadCheckTracker._access_log.items():
-            print(f"  {var}: {len(recs)} records")
-            for r in recs[:5]:
-                print(f"    T{r.thread_id} {r.operation} @{r.location}")
+    ThreadCheckTracker.start()
+    sys.path.insert(0, str(tmp_dir))
+    import diagnose_mod
+    ok = hasattr(diagnose_mod, "_threadcheck_tracker")
+    print(f"  has _threadcheck_tracker: {ok}")
+    if ok:
+        diagnose_mod.run_racy()
+        races = ThreadCheckTracker.detect_races()
+        print(f"  races detected: {len(races)}")
+    else:
+        # fallback: check meta_path
+        print(f"  sys.meta_path[0]: {type(sys.meta_path[0]).__name__}")
 finally:
-    ThreadCheckTracker.stop()
     ThreadCheckTracker.reset()
     uninstall_hook(hook)
+    sys.modules.pop("diagnose_mod", None)
 
-print(f"\n--- Done ---")
+
+# ── Test B: import via spec_from_file_location (mimics pytest) ───
+print("\n=== Test B: import via spec_from_file_location (pytest-style) ===")
+hook = install_hook(include_paths=[REPO])
+try:
+    ThreadCheckTracker.start()
+
+    # pytest adds test file's parent dir to sys.path
+    sys.path.insert(0, str(tmp_dir))
+
+    # pytest imports test file via spec_from_file_location
+    spec = importlib.util.spec_from_file_location(
+        "test_diag", str(new_test),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["test_diag"] = mod
+    spec.loader.exec_module(mod)
+
+    # now check if diagnose_mod was instrumented
+    diag_mod = sys.modules.get("diagnose_mod")
+    if diag_mod is None:
+        print("  diagnose_mod NOT in sys.modules (hook may not have been called)")
+    else:
+        ok = hasattr(diag_mod, "_threadcheck_tracker")
+        print(f"  diagnose_mod has _threadcheck_tracker: {ok}")
+        if ok:
+            # run the test
+            mod.test_diag()
+            races = ThreadCheckTracker.detect_races()
+            print(f"  races detected: {len(races)}")
+            for var, r1, r2 in races:
+                print(f"    {var}: T{r1.thread_id} {r1.operation} vs T{r2.thread_id} {r2.operation}")
+        else:
+            print("  hook did not instrument diagnose_mod!")
+            print(f"  sys.meta_path[0]: {type(sys.meta_path[0]).__name__}")
+finally:
+    ThreadCheckTracker.reset()
+    uninstall_hook(hook)
+    for m in list(sys.modules.keys()):
+        if m.startswith("diagnose_mod") or m.startswith("test_diag"):
+            sys.modules.pop(m, None)
+
+
+print("\n=== Done ===")
