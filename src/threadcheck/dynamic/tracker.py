@@ -1,5 +1,3 @@
-import os
-import sys
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -40,8 +38,6 @@ class ThreadCheckTracker:
                     cls._thread_clocks[tid] = VectorClock()
         return cls._thread_clocks[tid]
 
-    _diag_count = 0
-
     @classmethod
     def write_before(cls, var_name: str, file: str = "", line: int = 0):
         if not cls._active:
@@ -58,13 +54,6 @@ class ThreadCheckTracker:
         )
         with cls._lock:
             cls._access_log[var_name].append(record)
-            if cls._diag_count < 10:
-                cls._diag_count += 1
-                ct = threading.current_thread()
-                print(
-                    f"[TC_DIAG] write_before tid={tid} ct_name={ct.name} ct_ident={ct.ident} var={var_name}",
-                    file=sys.stderr, flush=True,
-                )
 
     @classmethod
     def read_before(cls, var_name: str, file: str = "", line: int = 0):

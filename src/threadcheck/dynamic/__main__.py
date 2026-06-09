@@ -4,9 +4,10 @@ from pathlib import Path
 
 from .tracker import ThreadCheckTracker
 from .transform import TrackInjector
+from ..reporting.formatter import format_dynamic_races, format_dynamic_json
 
 
-def run_script(script_path: str):
+def run_script(script_path: str, output_format: str = "text"):
     path = Path(script_path).resolve()
     if not path.exists():
         print(f"File not found: {path}", file=sys.stderr)
@@ -34,5 +35,13 @@ def run_script(script_path: str):
     finally:
         ThreadCheckTracker.stop()
 
-    print(ThreadCheckTracker.format_races())
+    races = ThreadCheckTracker.detect_races()
+    with ThreadCheckTracker._lock:
+        alog = dict(ThreadCheckTracker._access_log)
+
+    if output_format == "json":
+        print(format_dynamic_json(races))
+    else:
+        print(format_dynamic_races(races, alog))
+
     ThreadCheckTracker.reset()
