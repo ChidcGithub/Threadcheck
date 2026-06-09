@@ -21,6 +21,9 @@ def pytest_configure(config):
     if config.getoption("--threadcheck"):
         _hook_instance = install_hook(include_paths=[config.rootpath])
         ThreadCheckTracker.start()
+        import sys
+        print(f"[threadcheck] hook installed, rootpath={config.rootpath}", flush=True)
+        print(f"[threadcheck] include_paths={[str(p) for p in _hook_instance._include_paths]}", flush=True)
 
 
 def pytest_unconfigure(config):
@@ -40,8 +43,12 @@ def pytest_runtest_call(item):
     if item.config.getoption("--threadcheck"):
         races = ThreadCheckTracker.detect_races()
         if races:
-            report = ThreadCheckTracker.format_races()
-            ThreadCheckTracker.reset_logs()
-            pytest.fail(report)
-        else:
-            ThreadCheckTracker.reset_logs()
+            item._threadcheck_race_report = ThreadCheckTracker.format_races()
+        ThreadCheckTracker.reset_logs()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_teardown(item, nextitem):
+    report = getattr(item, "_threadcheck_race_report", None)
+    if report:
+        pytest.fail(report)

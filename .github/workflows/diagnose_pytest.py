@@ -1,4 +1,8 @@
-"""Diagnose the full pytest plugin flow directly (not in subprocess)."""
+"""Diagnose the full pytest plugin flow.
+- Test A: direct import (same process)
+- Test B: subprocess pytest (like the real test)
+"""
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -53,70 +57,97 @@ test_file.write_text(
     encoding="utf-8",
 )
 
+# ═══════════════════════════════════════════════════════════════════
+# Test A: direct import (same process)
+# ═══════════════════════════════════════════════════════════════════
+print("\n" + "=" * 60)
+print("Test A: direct import (same process)")
+print("=" * 60)
+
 sys.path.insert(0, str(tmp_dir))
 
-# ── 2. Install hook & start tracker (like pytest_configure) ──────
 from threadcheck.dynamic.hook import install_hook, uninstall_hook
 from threadcheck.dynamic.tracker import ThreadCheckTracker
 
 rootpath = REPO
 hook = install_hook(include_paths=[rootpath])
-print(f"\ninclude_paths: {[str(p) for p in hook._include_paths]}")
+print(f"include_paths: {[str(p) for p in hook._include_paths]}")
 
 ThreadCheckTracker.start()
 print(f"tracker active: {ThreadCheckTracker._active}")
 
-# ── 3. Import test module (like collection, via importlib.import_module) ──
 import importlib
-
-print(f"\nsys.path before import: {[p for p in sys.path if 'tmp_test' in p]}")
-
 try:
     test_mod = importlib.import_module("test_race")
     print(f"imported: {test_mod}")
-    print(f"test_race module __file__: {test_mod.__file__}")
 except Exception as e:
     print(f"import failed: {e}")
-    import traceback
-    traceback.print_exc()
+    import traceback; traceback.print_exc()
     sys.exit(1)
 
-# ── 4. Check if race_helpers was instrumented ────────────────────
 import race_helpers as rh
 has_tracker = hasattr(rh, "_threadcheck_tracker")
-print(f"\nrace_helpers has _threadcheck_tracker: {has_tracker}")
-if has_tracker:
-    print(f"  type: {type(rh.__dict__['_threadcheck_tracker']).__name__}")
-else:
-    print("  HOOK FAILED TO INSTRUMENT race_helpers!")
-    print(f"  sys.meta_path[0]: {type(sys.meta_path[0]).__name__}")
-    print(f"  checking find_spec...")
+print(f"race_helpers has _threadcheck_tracker: {has_tracker}")
+if not has_tracker:
+    print("  HOOK FAILED!")
     spec = hook.find_spec("race_helpers", None, None)
-    print(f"  find_spec returned: {spec}")
-    if spec:
-        print(f"    loader: {type(spec.loader).__name__}")
-        print(f"    origin: {spec.origin}")
+    print(f"  find_spec: {spec}")
+    print(f"  meta_path[0]: {type(sys.meta_path[0]).__name__}")
     sys.exit(1)
 
-# ── 5. Run the test (like pytest_runtest_call) ───────────────────
-print(f"\n--- Running test ---")
 ThreadCheckTracker.reset_logs()
-
-# Actually call the test function
 test_mod.test_race()
-
 races = ThreadCheckTracker.detect_races()
 print(f"races detected: {len(races)}")
 for var, r1, r2 in races:
     print(f"  {var}: T{r1.thread_id} {r1.operation} vs T{r2.thread_id} {r2.operation}")
 
 if not races:
-    # Debug: check access log
-    print(f"  access_log: {dict((k, len(v)) for k, v in ThreadCheckTracker._access_log.items())}")
-    print(f"  thread_clocks: {list(ThreadCheckTracker._thread_clocks.keys())}")
-else:
-    print(f"\nSUCCESS: race detected as expected!")
+    print(f"access_log: {dict((k, len(v)) for k, v in ThreadCheckTracker._access_log.items())}")
+    print(f"thread_clocks: {list(ThreadCheckTracker._thread_clocks.keys())}")
 
-# ── 6. Cleanup ───────────────────────────────────────────────────
 ThreadCheckTracker.reset()
 uninstall_hook(hook)
+
+# ═══════════════════════════════════════════════════════════════════
+# Test B: subprocess pytest (like the real test)
+# ═══════════════════════════════════════════════════════════════════
+print("\n" + "=" * 60)
+print("Test B: subprocess pytest (like test_plugin_detects_race)")
+print("=" * 60)
+
+# Clean up modules from Test A
+for m in list(sys.modules.keys()):
+    if m in ("test_race", "race_helpers"):
+        sys.modules.pop(m, None)
+
+result = subprocess.run(
+    [sys.executable, "-m", "pytest", str(test_file), "-v", "-s", "--threadcheck"],
+    capture_output=True, text=True, timeout=30,
+    cwd=REPO,
+)
+print(f"returncode: {result.returncode}")
+print(f"--- stdout ---")
+sys.stdout.flush()
+sys.stdout.write(result.stdout)
+sys.stdout.flush()
+if result.stderr:
+    print(f"--- stderr ---")
+    sys.stdout.flush()
+    sys.stdout.write(result.stderr)
+    sys.stdout.flush()
+
+if result.returncode != 0:
+    if "Data races detected" in result.stdout or "Data races detected" in result.stderr:
+        print("\nSUCCESS: subprocess detected race!")
+    else:
+        print(f"\nSubprocess failed but no 'Data races detected'")
+        if "Error" in result.stdout or "error" in result.stderr:
+            print("  (possibly a pytest error)")
+        sys.exit(1)
+else:
+    print("\nSUBPROCESS DID NOT DETECT RACE (exit 0)")
+    sys.exit(1)
+
+# ═══════════════════════════════════════════════════════════════════
+print("\nAll tests passed!")
