@@ -1,9 +1,9 @@
-import sys
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .clock import VectorClock
+from .._tid import current_tid as _current_tid
 
 
 @dataclass
@@ -31,18 +31,8 @@ class ThreadCheckTracker:
         cls._active = False
 
     @classmethod
-    def _current_tid(cls) -> int:
-        if sys.platform == "win32":
-            return threading.get_ident()
-        ct = threading.current_thread()
-        native = ct.native_id
-        if native is not None:
-            return native
-        return id(ct)
-
-    @classmethod
     def _get_clock(cls) -> tuple[VectorClock, int]:
-        tid = cls._current_tid()
+        tid = _current_tid()
         if tid not in cls._thread_clocks:
             with cls._lock:
                 if tid not in cls._thread_clocks:

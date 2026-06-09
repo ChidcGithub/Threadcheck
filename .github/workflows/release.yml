@@ -25,9 +25,52 @@ jobs:
       - run: pip install -e ".[test]"
       - run: python -m pytest tests/ -v
 
+  build_wheels:
+    name: Build wheel for ${{ matrix.plat }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            plat: manylinux_2_28_x86_64
+            tid_src: _tid_linux.py
+          - os: windows-latest
+            plat: win_amd64
+            tid_src: _tid_win.py
+          - os: macos-13
+            plat: macosx_10_9_x86_64
+            tid_src: _tid_macos.py
+          - os: macos-14
+            plat: macosx_11_0_arm64
+            tid_src: _tid_macos.py
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Copy platform tid module
+        run: cp src/threadcheck/${{ matrix.tid_src }} src/threadcheck/_tid.py
+
+      - name: Build wheel
+        run: |
+          pip install build
+          python -m build --wheel
+
+      - name: Tag wheel with platform tag
+        run: python scripts/tag_wheel.py dist/ ${{ matrix.plat }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.plat }}
+          path: dist/*.whl
+
   release:
     name: Create Release & Publish to PyPI
-    needs: test
+    needs: build_wheels
     runs-on: ubuntu-latest
 
     steps:
@@ -115,15 +158,17 @@ jobs:
           **Repository Size:** ${{ steps.repo_size.outputs.size }} KB
           EOF
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
 
-      - name: Build package
+      - name: Build source distribution
         run: |
           pip install build
-          python -m build
+          python -m build --sdist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

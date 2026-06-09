@@ -42,3 +42,8 @@ path = "src/threadcheck/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/threadcheck"]
+exclude = [
+    "src/threadcheck/_tid_win.py",
+    "src/threadcheck/_tid_linux.py",
+    "src/threadcheck/_tid_macos.py",
+]
