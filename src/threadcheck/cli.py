@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json as _json
 import re
@@ -5,9 +7,11 @@ import sys
 from pathlib import Path
 
 from ._version import __version__
+from .config import ThreadCheckConfig
 from .static.analyzer import analyze_path
 from .reporting.formatter import format_report, format_warnings_json
 from .reporting.sarif import format_sarif
+from .reporting.html import format_html
 from .dynamic.__main__ import run_script
 from .compat import check_compat
 from .compat.models import CompatStatus
@@ -31,12 +35,16 @@ def main():
     fmt.add_argument("--json", action="store_true", help="Output in JSON format")
     fmt.add_argument("--sarif", action="store_true", help="Output in SARIF v2.1.0 format")
     scan.add_argument("-o", "--output", help="Write output to file (default: stdout)")
+    scan.add_argument("-q", "--quiet", action="store_true", help="Suppress banner and per-file output, show only summary")
+    scan.add_argument("-v", "--verbose", action="store_true", help="Show source snippets for each issue")
 
     run = sub.add_parser("run", help="Dynamic race detection")
     run.add_argument("script", help="Python script to execute")
     run_fmt = run.add_mutually_exclusive_group()
     run_fmt.add_argument("--json", action="store_true", help="Output in JSON format")
     run.add_argument("-o", "--output", help="Write output to file (default: stdout)")
+    run.add_argument("-q", "--quiet", action="store_true", help="Suppress banner")
+    run.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
 
     compat = sub.add_parser("compat", help="Check free-threading compatibility")
     compat.add_argument("path", nargs="?", default=".", help="Project path")
@@ -59,6 +67,8 @@ def _detect_format(output_path: str | None) -> str:
             return "json"
         if ext == ".sarif":
             return "sarif"
+        if ext == ".html":
+            return "html"
     return "text"
 
 
@@ -68,10 +78,14 @@ def _do_scan(args):
         print(f"Path does not exist: {path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"threadcheck scan -- analysing {path}")
-    print()
+    root = path if path.is_dir() else path.parent
+    config = ThreadCheckConfig.load(root)
 
-    warnings = analyze_path(str(path))
+    if not args.quiet:
+        print(f"threadcheck scan -- analysing {path}")
+        print()
+
+    warnings = analyze_path(str(path), config=config)
 
     fmt = _detect_format(args.output)
     if args.json:
@@ -79,25 +93,31 @@ def _do_scan(args):
     elif args.sarif:
         fmt = "sarif"
 
-    if fmt == "json":
+    if fmt == "html":
+        output = format_html(warnings, title=f"threadcheck Report - {path}")
+        _write_output(args.output, output)
+    elif fmt == "json":
         output = format_warnings_json(warnings)
         _write_output(args.output, output)
     elif fmt == "sarif":
         output = format_sarif(warnings)
         _write_output(args.output, output)
     else:
-        text = format_report(warnings)
+        if args.quiet:
+            text = _format_summary_only(warnings)
+        else:
+            text = format_report(warnings, verbose=args.verbose)
         _write_output(args.output, text)
 
+
+def _format_summary_only(warnings: list) -> str:
     total = len(warnings)
     errors = sum(1 for w in warnings if w.severity.value == "error")
     warns = sum(1 for w in warnings if w.severity.value == "warning")
     infos = sum(1 for w in warnings if w.severity.value == "info")
-    print()
-    print(f"Total: {total} issue(s) ({errors} error(s), {warns} warning(s), {infos} info)")
-
-    if warns > 0 or errors > 0:
-        sys.exit(1)
+    if total == 0:
+        return "No data-race issues detected."
+    return f"{total} issue(s): {errors} error(s), {warns} warning(s), {infos} info"
 
 
 def _do_run(args):
@@ -133,11 +153,11 @@ def _do_compat(args):
     can_emoji = _can_print_emoji()
     for r in results:
         if r.status.value == "compatible":
-            icon = _icon("✅", "[OK]", can_emoji)
+            icon = _icon("\u2705", "[OK]", can_emoji)
         elif r.status.value == "needs_verification":
-            icon = _icon("⚠️", "[??]", can_emoji)
+            icon = _icon("\u26a0\ufe0f", "[??]", can_emoji)
         else:
-            icon = _icon("❌", "[--]", can_emoji)
+            icon = _icon("\u274c", "[--]", can_emoji)
         print(f"  {icon}  {r.name:<20} {r.reason}")
 
     print()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any
 
 from ..static.models import RaceWarning, Severity, Confidence
@@ -57,31 +57,101 @@ _SEVERITY_TAG = {
     Severity.INFO: "INFO",
 }
 
+_SEVERITY_ICON = {
+    Severity.ERROR: ("\u2716", "X"),
+    Severity.WARNING: ("\u26a0", "!"),
+    Severity.INFO: ("\u2139", "i"),
+}
 
-def format_report(warnings: list[RaceWarning]) -> str:
+
+def format_report(warnings: list[RaceWarning], verbose: bool = False) -> str:
+    can_emoji = _use_color() and _can_print_emoji()
     if not warnings:
         return _s("green", "No data-race issues detected") if _COLOR else "No data-race issues detected"
 
-    lines: list[str] = []
+    by_file: dict[str, list[RaceWarning]] = defaultdict(list)
     for w in warnings:
-        sc = _SEVERITY_COLOR.get(w.severity, "")
-        lines.append(
-            f"  {_s(sc, _SEVERITY_TAG.get(w.severity, '?'))} "
-            f"{_s('bold', _CONFIDENCE_TAG.get(w.confidence, ''))} "
-            f"[{w.category.value}] {w.file}:{w.line}:{w.col}"
-        )
-        lines.append(f"       {w.message}")
-        if w.suggestion:
-            lines.append(f"       {_s('dim', 'suggestion:')} {w.suggestion}")
-        lines.append("")
+        by_file[str(w.file)].append(w)
 
-    lines.append(f"{_s('dim', '---')}")
+    lines: list[str] = []
+    file_count = len(by_file)
+
+    for file_idx, (filepath, file_warnings) in enumerate(sorted(by_file.items())):
+        short_path = _shorten_path(filepath)
+        lines.append("")
+        lines.append(f"  {_s('bold', _s('blue', f'[{file_idx+1}/{file_count}] {short_path}'))}")
+        lines.append(f"  {_s('dim', '\u2500' * min(60, len(short_path) + 4))}")
+
+        for w in file_warnings:
+            sc = _SEVERITY_COLOR.get(w.severity, "")
+            icon, fallback = _SEVERITY_ICON.get(w.severity, ("", ""))
+            icon_str = _s(sc, icon) if can_emoji else _s(sc, f"[{fallback}]")
+            lines.append(
+                f"    {icon_str} "
+                f"{_s('bold', _CONFIDENCE_TAG.get(w.confidence, ''))} "
+                f"[{w.category.value}] line {w.line}:{w.col}"
+            )
+            lines.append(f"          {w.message}")
+            if w.suggestion:
+                lines.append(f"          {_s('dim', 'suggestion:')} {w.suggestion}")
+
+            if verbose:
+                snippet = _get_source_snippet(filepath, w.line)
+                if snippet:
+                    for sline in snippet:
+                        lines.append(f"          {sline}")
+
+        fe = sum(1 for w in file_warnings if w.severity == Severity.ERROR)
+        fw = sum(1 for w in file_warnings if w.severity == Severity.WARNING)
+        fi = sum(1 for w in file_warnings if w.severity == Severity.INFO)
+        parts = []
+        if fe:
+            parts.append(f"{fe} error(s)")
+        if fw:
+            parts.append(f"{fw} warning(s)")
+        if fi:
+            parts.append(f"{fi} info")
+        lines.append(f"  {_s('dim', f'  {len(file_warnings)} issue(s) in this file ({", ".join(parts)})')}")
+
+    lines.append("")
+    lines.append(f"{_s('dim', '\u2500' * 40)}")
     total = len(warnings)
     errors = sum(1 for w in warnings if w.severity == Severity.ERROR)
     warns = sum(1 for w in warnings if w.severity == Severity.WARNING)
     infos = sum(1 for w in warnings if w.severity == Severity.INFO)
-    lines.append(f"Total: {total} issue(s) ({errors} error(s), {warns} warning(s), {infos} info(s))")
+    lines.append(f"Total: {total} issue(s) in {file_count} file(s) ({errors} error(s), {warns} warning(s), {infos} info(s))")
     return "\n".join(lines)
+
+
+def _shorten_path(filepath: str) -> str:
+    parts = filepath.replace("\\", "/").split("/")
+    if len(parts) <= 3:
+        return filepath
+    return "/".join(parts[:1] + ["..."] + parts[-2:])
+
+
+def _get_source_snippet(filepath: str, line: int, context: int = 2) -> list[str]:
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            source_lines = f.readlines()
+    except Exception:
+        return []
+
+    start = max(0, line - context - 1)
+    end = min(len(source_lines), line + context)
+    result: list[str] = []
+    for i in range(start, end):
+        prefix = ">" if i == line - 1 else " "
+        result.append(f"{prefix} {_s('dim', str(i+1).rjust(4))} | {source_lines[i].rstrip()}" if _COLOR else f"{prefix} {str(i+1).rjust(4)} | {source_lines[i].rstrip()}")
+    return result
+
+
+def _can_print_emoji() -> bool:
+    try:
+        "\u2716".encode(sys.stdout.encoding)
+        return True
+    except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+        return False
 
 
 def format_dynamic_races(

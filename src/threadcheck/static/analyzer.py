@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import ast
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import RaceWarning
 from .lock_tracker import LockTracker
@@ -10,6 +13,9 @@ from .visitors import (
     SharedMutableVisitor,
     ClassAttributeVisitor,
 )
+
+if TYPE_CHECKING:
+    from ..config import ThreadCheckConfig
 
 _SKIP_DIRS = frozenset({
     ".git", "__pycache__", ".venv", "venv", "env", ".env",
@@ -55,7 +61,7 @@ class AnalysisContext:
                         self._thread_targets.add(args[0].id)
 
 
-def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None) -> list[RaceWarning]:
+def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None, config: ThreadCheckConfig | None = None) -> list[RaceWarning]:
     try:
         source = filepath.read_text(encoding="utf-8")
     except Exception:
@@ -80,6 +86,13 @@ def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None) 
         visitor = visitor_cls(filepath, context)
         visitor.visit(tree)
         all_warnings.extend(visitor.warnings)
+
+    if config is not None:
+        root = config.project_root if hasattr(config, 'project_root') else filepath.parent
+        all_warnings = [
+            w for w in all_warnings
+            if not config.should_ignore_line(filepath, root, w.line)
+        ]
 
     return all_warnings
 
@@ -109,24 +122,31 @@ def _collect_thread_targets(files: list[Path]) -> set[str]:
     return targets
 
 
-def analyze_path(path: str) -> list[RaceWarning]:
+def analyze_path(path: str, config: ThreadCheckConfig | None = None) -> list[RaceWarning]:
     p = Path(path).resolve()
     all_warnings: list[RaceWarning] = []
 
+    root = p if p.is_dir() else p.parent
+
     if p.is_file():
         if p.suffix == ".py":
-            all_warnings.extend(analyze_file(p))
+            if config is None or not config.should_ignore_file(p, root):
+                all_warnings.extend(analyze_file(p, config=config))
     elif p.is_dir():
-        py_files = [f for f in sorted(p.rglob("*.py")) if not _should_skip(f)]
+        py_files = [f for f in sorted(p.rglob("*.py")) if not _should_skip(f, config, root)]
         global_targets = _collect_thread_targets(py_files)
-        for py_file in py_files:
-            all_warnings.extend(analyze_file(py_file, global_targets))
+        total = len(py_files)
+        for idx, py_file in enumerate(py_files):
+            all_warnings.extend(analyze_file(py_file, global_targets, config))
 
     return all_warnings
 
 
-def _should_skip(path: Path) -> bool:
+def _should_skip(path: Path, config: ThreadCheckConfig | None = None, root: Path | None = None) -> bool:
     for part in path.parts:
         if part in _SKIP_DIRS or part.startswith("."):
+            return True
+    if config is not None and root is not None:
+        if config.should_ignore_file(path, root):
             return True
     return False

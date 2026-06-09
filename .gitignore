@@ -28,3 +28,9 @@ tmp_diagnose/
 
 # Lock files
 uv.lock
+
+# Agent Files
+AGENTS.md
+
+# Generated reports
+demo/report.html

@@ -20,10 +20,27 @@ sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 def run(cmd: list[str], label: str):
     print(f"\n  {label}", flush=True)
-    print(f"  {'─' * len(label)}\n", flush=True)
+    print(f"  {'-' * len(label)}\n", flush=True)
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(
         [sys.executable, "-m", "threadcheck", *cmd, str(SCRIPT)],
+        capture_output=True,
+        env=env,
+        cwd=ROOT,
+    )
+    out = result.stdout.decode("utf-8", errors="backslashreplace")
+    if result.stderr:
+        out += "\n" + result.stderr.decode("utf-8", errors="backslashreplace")
+    print(out.strip() or "(no output)", flush=True)
+    print(flush=True)
+
+
+def run_raw(cmd: list[str], label: str):
+    print(f"\n  {label}", flush=True)
+    print(f"  {'-' * len(label)}\n", flush=True)
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    result = subprocess.run(
+        [sys.executable, "-m", "threadcheck", *cmd],
         capture_output=True,
         env=env,
         cwd=ROOT,
@@ -40,19 +57,29 @@ def main():
     print("  threadcheck demo -- Python data race detector", flush=True)
     print(BANNER, flush=True)
 
-    run(["scan"], "1) Static analysis scan")
+    run(["scan"], "1) Static analysis scan (default)")
+    run(["scan", "-q"], "2) Static analysis (quiet mode)")
+    run(["scan", "-v"], "3) Static analysis (verbose with source snippets)")
+    run(["scan", "--json"], "4) Static analysis (JSON output)")
+    run(["scan", "--sarif"], "5) Static analysis (SARIF output)")
+    run(["run"], "6) Dynamic detection (text output)")
+    run(["run", "--json"], "7) Dynamic detection (JSON output)")
 
-    run(["run"], "2) Dynamic detection (text output)")
+    report_path = ROOT / "demo" / "report.html"
+    subprocess.run(
+        [sys.executable, "-m", "threadcheck", "scan", "-o", str(report_path), str(SCRIPT)],
+        capture_output=True, env={**os.environ, "PYTHONIOENCODING": "utf-8"}, cwd=ROOT,
+    )
+    print(f"\n  8) HTML report saved to: {report_path}", flush=True)
+    print(f"     Open in browser to view the interactive report.\n", flush=True)
 
-    run(["run", "--json"], "3) Dynamic detection (JSON output)")
-
-    run(["scan", "--sarif"], "4) Static analysis (SARIF output)")
+    run_raw(["compat"], "9) Free-threading compatibility check")
 
     print(BANNER, flush=True)
     print("  Try it yourself:", flush=True)
     print(f"    python -m threadcheck scan    {SCRIPT}", flush=True)
     print(f"    python -m threadcheck run     {SCRIPT}", flush=True)
-    print(f"    python -m threadcheck run --json {SCRIPT}", flush=True)
+    print(f"    python -m threadcheck compat", flush=True)
     print(BANNER, flush=True)
 
 
