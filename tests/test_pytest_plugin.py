@@ -54,31 +54,24 @@ def test_plugin_detects_race():
         """),
         encoding="utf-8",
     )
-    debug_dir = PROJECT_ROOT / "tmp_test_plugin" / "debug_out"
-    debug_dir.mkdir(parents=True, exist_ok=True)
     result = _run_pytest(
         "test_race.py",
-        f"""\
-        import json, os
+        """\
+        import sys
         from race_helpers import run_racy_increment
         import race_helpers as rh
 
-        _td = {str(debug_dir)!r}
-        os.makedirs(_td, exist_ok=True)
         _has = "_threadcheck_tracker" in rh.__dict__
-        with open(os.path.join(_td, "has_tracker.txt"), "w") as _f:
-            _f.write(str(_has))
-            if _has:
-                _f.write(" tracker_type=" + type(rh.__dict__["_threadcheck_tracker"]).__name__)
+        print(f"[DBG] has_tracker={_has}", flush=True)
+        if _has:
+            _t = type(rh.__dict__["_threadcheck_tracker"]).__name__
+            print(f"[DBG] tracker_type={_t}", flush=True)
 
         def test_race():
             run_racy_increment()
         """,
-        extra_args=["--threadcheck"],
+        extra_args=["--threadcheck", "-s"],
     )
-    has_tracker_file = debug_dir / "has_tracker.txt"
-    if has_tracker_file.exists():
-        print(f"[debug] has_tracker={has_tracker_file.read_text()}")
     assert result.returncode != 0, (
         f"Expected test to fail due to data race.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
