@@ -91,14 +91,14 @@ class TrackInjector:
 
             elif isinstance(stmt, ast.With):
                 lock_name = _resolve_lock_name(stmt)
-                if lock_name:
-                    new.append(
-                        _make_lock_acquire(lock_name, self.filename, stmt.lineno)
-                    )
                 new.append(stmt)
                 if lock_name:
-                    new.append(
-                        _make_lock_release(lock_name, self.filename, stmt.lineno)
+                    stmt.body.insert(
+                        0,
+                        _make_lock_acquire(lock_name, self.filename, stmt.lineno),
+                    )
+                    stmt.body.append(
+                        _make_lock_release(lock_name, self.filename, stmt.lineno),
                     )
             else:
                 new.append(stmt)

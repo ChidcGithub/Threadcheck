@@ -81,7 +81,7 @@ def _run_transformed_fixture(fixture_name: str) -> tuple[int, str, str]:
         "finally:\n"
         "    ThreadCheckTracker.stop()\n"
         "count = len(ThreadCheckTracker.detect_races())\n"
-        "print(f'DIAG: python={{sys.version}}')\n"
+        "print(f'DIAG: python={sys.version}')\n"
         "print(f'RACES:{count}')\n"
         "ThreadCheckTracker.reset()\n"
     )
