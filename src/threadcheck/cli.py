@@ -6,6 +6,7 @@ from pathlib import Path
 from ._version import __version__
 from .static.analyzer import analyze_path
 from .reporting.formatter import format_report
+from .reporting.sarif import format_sarif
 from .dynamic.__main__ import run_script
 
 
@@ -23,7 +24,9 @@ def main():
 
     scan = sub.add_parser("scan", help="Static analysis for data races")
     scan.add_argument("path", help="File or directory to scan")
-    scan.add_argument("--json", action="store_true", help="Output in JSON format")
+    fmt = scan.add_mutually_exclusive_group()
+    fmt.add_argument("--json", action="store_true", help="Output in JSON format")
+    fmt.add_argument("--sarif", action="store_true", help="Output in SARIF v2.1.0 format")
     scan.add_argument("-o", "--output", help="Write output to file (default: stdout)")
 
     run = sub.add_parser("run", help="Dynamic race detection (Phase 3)")
@@ -63,19 +66,23 @@ def _do_scan(args):
         output = json.dumps(
             [w.to_dict() for w in warnings], indent=2, ensure_ascii=False
         )
-        if args.output:
-            Path(args.output).write_text(output, encoding="utf-8")
-        else:
-            print(output)
+        _write_output(args.output, output)
+    elif args.sarif:
+        output = format_sarif(warnings)
+        _write_output(args.output, output)
     else:
         text = format_report(warnings)
-        if args.output:
-            Path(args.output).write_text(text, encoding="utf-8")
-        else:
-            print(text)
+        _write_output(args.output, text)
 
     print()
     print(f"Total: {total} issue(s) ({errors} error(s), {warns} warning(s), {infos} info)")
+
+
+def _write_output(path_arg: str | None, content: str):
+    if path_arg:
+        Path(path_arg).write_text(content, encoding="utf-8")
+    else:
+        print(content)
 
 
 if __name__ == "__main__":
