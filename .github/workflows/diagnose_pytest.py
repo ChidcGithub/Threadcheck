@@ -105,6 +105,10 @@ for var, r1, r2 in races:
 if not races:
     print(f"access_log: {dict((k, len(v)) for k, v in ThreadCheckTracker._access_log.items())}")
     print(f"thread_clocks: {list(ThreadCheckTracker._thread_clocks.keys())}")
+    # Show thread_ids from records to diagnose threading.local issue
+    for var, recs in ThreadCheckTracker._access_log.items():
+        all_tids = set(r.thread_id for r in recs)
+        print(f"  thread_ids in '{var}': {len(all_tids)} unique ids: {all_tids}")
 
 ThreadCheckTracker.reset()
 uninstall_hook(hook)

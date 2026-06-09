@@ -15,7 +15,6 @@ class AccessRecord:
 
 
 class ThreadCheckTracker:
-    _tls = threading.local()
     _lock = threading.Lock()
     _access_log: dict[str, list[AccessRecord]] = defaultdict(list)
     _thread_clocks: dict[int, VectorClock] = {}
@@ -30,25 +29,26 @@ class ThreadCheckTracker:
         cls._active = False
 
     @classmethod
-    def _ensure_clock(cls):
-        if not hasattr(cls._tls, "clock"):
-            cls._tls.clock = VectorClock()
-            tid = threading.get_ident()
+    def _get_clock(cls) -> VectorClock:
+        tid = threading.get_ident()
+        if tid not in cls._thread_clocks:
             with cls._lock:
-                cls._thread_clocks[tid] = cls._tls.clock
+                if tid not in cls._thread_clocks:
+                    cls._thread_clocks[tid] = VectorClock()
+        return cls._thread_clocks[tid]
 
     @classmethod
     def write_before(cls, var_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        cls._ensure_clock()
+        clock = cls._get_clock()
         tid = threading.get_ident()
-        cls._tls.clock.tick(tid)
+        clock.tick(tid)
         record = AccessRecord(
             var_name=var_name,
             operation="write",
             thread_id=tid,
-            clock=cls._tls.clock.copy(),
+            clock=clock.copy(),
             location=(file, line),
         )
         with cls._lock:
@@ -58,14 +58,14 @@ class ThreadCheckTracker:
     def read_before(cls, var_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        cls._ensure_clock()
+        clock = cls._get_clock()
         tid = threading.get_ident()
-        cls._tls.clock.tick(tid)
+        clock.tick(tid)
         record = AccessRecord(
             var_name=var_name,
             operation="read",
             thread_id=tid,
-            clock=cls._tls.clock.copy(),
+            clock=clock.copy(),
             location=(file, line),
         )
         with cls._lock:
@@ -75,21 +75,21 @@ class ThreadCheckTracker:
     def lock_acquire(cls, lock_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        cls._ensure_clock()
         tid = threading.get_ident()
+        clock = cls._get_clock()
         with cls._lock:
             if lock_name in cls._thread_clocks:
-                cls._tls.clock.merge(cls._thread_clocks[lock_name])
-        cls._tls.clock.tick(tid)
+                clock.merge(cls._thread_clocks[lock_name])
+        clock.tick(tid)
 
     @classmethod
     def lock_release(cls, lock_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        cls._ensure_clock()
+        clock = cls._get_clock()
         tid = threading.get_ident()
         with cls._lock:
-            cls._thread_clocks[lock_name] = cls._tls.clock.copy()
+            cls._thread_clocks[lock_name] = clock.copy()
 
     @classmethod
     def reset(cls):
