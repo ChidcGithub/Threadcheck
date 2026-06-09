@@ -24,8 +24,14 @@ def _run_pytest(test_name: str, code: str, extra_args: list[str] | None = None) 
     return result
 
 
+def _helper_path(name: str) -> Path:
+    d = PROJECT_ROOT / "tmp_test_plugin"
+    d.mkdir(exist_ok=True)
+    return d / name
+
+
 def test_plugin_detects_race():
-    helper = PROJECT_ROOT / "tmp_test_plugin" / "race_helpers.py"
+    helper = _helper_path("race_helpers.py")
     helper.write_text(
         textwrap.dedent("""\
             import threading
@@ -69,7 +75,7 @@ def test_plugin_detects_race():
 
 
 def test_plugin_no_race_when_locked():
-    helper = PROJECT_ROOT / "tmp_test_plugin" / "safe_helpers.py"
+    helper = _helper_path("safe_helpers.py")
     helper.write_text(
         textwrap.dedent("""\
             import threading
@@ -113,7 +119,7 @@ def test_plugin_no_race_when_locked():
 
 
 def test_plugin_inactive_without_flag():
-    helper = PROJECT_ROOT / "tmp_test_plugin" / "race_helpers_noflag.py"
+    helper = _helper_path("race_helpers_noflag.py")
     helper.write_text(
         textwrap.dedent("""\
             import threading
