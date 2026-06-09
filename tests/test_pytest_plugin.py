@@ -54,16 +54,31 @@ def test_plugin_detects_race():
         """),
         encoding="utf-8",
     )
+    debug_dir = PROJECT_ROOT / "tmp_test_plugin" / "debug_out"
+    debug_dir.mkdir(parents=True, exist_ok=True)
     result = _run_pytest(
         "test_race.py",
-        """\
+        f"""\
+        import json, os
         from race_helpers import run_racy_increment
+        import race_helpers as rh
+
+        _td = {str(debug_dir)!r}
+        os.makedirs(_td, exist_ok=True)
+        _has = "_threadcheck_tracker" in rh.__dict__
+        with open(os.path.join(_td, "has_tracker.txt"), "w") as _f:
+            _f.write(str(_has))
+            if _has:
+                _f.write(" tracker_type=" + type(rh.__dict__["_threadcheck_tracker"]).__name__)
 
         def test_race():
             run_racy_increment()
         """,
         extra_args=["--threadcheck"],
     )
+    has_tracker_file = debug_dir / "has_tracker.txt"
+    if has_tracker_file.exists():
+        print(f"[debug] has_tracker={has_tracker_file.read_text()}")
     assert result.returncode != 0, (
         f"Expected test to fail due to data race.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -114,6 +129,35 @@ def test_plugin_no_race_when_locked():
     )
     assert result.returncode == 0, (
         f"Expected test to pass (lock-protected).\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+
+def test_hook_includes_path():
+    """Verify that include_paths filtering does not block files under rootpath."""
+    mod = _helper_path("dummy_mod.py")
+    mod.write_text("SENTINEL = 42\n", encoding="utf-8")
+    runner = _helper_path("check_hook.py")
+    runner.write_text(
+        textwrap.dedent(f"""\
+            import sys
+            sys.path.insert(0, {str(mod.parent)!r})
+            from threadcheck.dynamic.hook import install_hook, uninstall_hook
+            from pathlib import Path
+            install_hook(include_paths=[Path({str(PROJECT_ROOT)!r})])
+            import dummy_mod
+            ok = hasattr(dummy_mod, "_threadcheck_tracker")
+            uninstall_hook(sys.meta_path[0] if sys.meta_path else None)
+            sys.exit(0 if ok else 1)
+        """),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, str(runner)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, (
+        f"Hook did not inject _threadcheck_tracker into helper module.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
