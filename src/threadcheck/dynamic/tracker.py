@@ -18,6 +18,7 @@ class ThreadCheckTracker:
     _lock = threading.Lock()
     _access_log: dict[str, list[AccessRecord]] = defaultdict(list)
     _thread_clocks: dict[int, VectorClock] = {}
+    _lock_clocks: dict[str, VectorClock] = {}
     _active = False
 
     @classmethod
@@ -52,10 +53,6 @@ class ThreadCheckTracker:
             location=(file, line),
         )
         with cls._lock:
-            if len(cls._access_log[var_name]) < 3:
-                import sys
-                print(f"[DBG_write] tid={tid} var={var_name} line={line}",
-                      file=sys.stderr, flush=True)
             cls._access_log[var_name].append(record)
 
     @classmethod
@@ -82,8 +79,8 @@ class ThreadCheckTracker:
         tid = threading.get_ident()
         clock = cls._get_clock()
         with cls._lock:
-            if lock_name in cls._thread_clocks:
-                clock.merge(cls._thread_clocks[lock_name])
+            if lock_name in cls._lock_clocks:
+                clock.merge(cls._lock_clocks[lock_name])
         clock.tick(tid)
 
     @classmethod
@@ -93,13 +90,14 @@ class ThreadCheckTracker:
         clock = cls._get_clock()
         tid = threading.get_ident()
         with cls._lock:
-            cls._thread_clocks[lock_name] = clock.copy()
+            cls._lock_clocks[lock_name] = clock.copy()
 
     @classmethod
     def reset(cls):
         with cls._lock:
             cls._access_log.clear()
             cls._thread_clocks.clear()
+            cls._lock_clocks.clear()
         cls._active = False
 
     @classmethod
@@ -107,6 +105,7 @@ class ThreadCheckTracker:
         with cls._lock:
             cls._access_log.clear()
             cls._thread_clocks.clear()
+            cls._lock_clocks.clear()
 
     @classmethod
     def _race_key(cls, r1: AccessRecord, r2: AccessRecord) -> tuple:
