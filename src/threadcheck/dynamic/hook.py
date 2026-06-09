@@ -17,9 +17,11 @@ class ThreadCheckLoader(importlib.abc.Loader):
 
     def exec_module(self, module):
         spec = module.__spec__
-        source = self._get_source(spec)
+        source = self._get_source(spec, module)
         if source is None:
             raise ImportError(f"cannot load source for {spec.name}")
+
+        module.__file__ = spec.origin
 
         tree = ast.parse(source, filename=spec.origin)
         TrackInjector(filename=str(spec.origin)).transform(tree)
@@ -31,17 +33,18 @@ class ThreadCheckLoader(importlib.abc.Loader):
         exec(code, globals_dict)
 
     @staticmethod
-    def _get_source(spec):
-        if spec.origin and Path(spec.origin).suffix == ".py":
-            try:
-                return Path(spec.origin).read_text(encoding="utf-8")
-            except Exception:
-                return None
+    def _get_source(spec, module=None):
+        for candidate in (spec.origin, getattr(module, "__file__", None)):
+            if candidate and Path(candidate).suffix == ".py":
+                try:
+                    return Path(candidate).read_text(encoding="utf-8")
+                except Exception:
+                    pass
         if hasattr(spec.loader, "get_source"):
             try:
                 return spec.loader.get_source(spec.name)
             except Exception:
-                return None
+                pass
         return None
 
 
@@ -64,10 +67,11 @@ class ThreadCheckFinder(importlib.abc.MetaPathFinder):
                 entry = "."
             base = Path(entry) / f"{fullname.replace('.', '/')}.py"
             if base.exists() and self._should_instrument(base):
-                spec = importlib.util.spec_from_file_location(
+                spec = importlib.machinery.ModuleSpec(
                     fullname,
-                    str(base),
-                    loader=ThreadCheckLoader(self.tracker),
+                    ThreadCheckLoader(self.tracker),
+                    origin=str(base),
+                    is_package=False,
                 )
                 return spec
         return None
