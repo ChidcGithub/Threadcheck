@@ -1,4 +1,6 @@
 import argparse
+import json as _json
+import re
 import sys
 from pathlib import Path
 
@@ -7,6 +9,8 @@ from .static.analyzer import analyze_path
 from .reporting.formatter import format_report, format_warnings_json
 from .reporting.sarif import format_sarif
 from .dynamic.__main__ import run_script
+from .compat import check_compat
+from .compat.models import CompatStatus
 
 
 def main():
@@ -34,8 +38,9 @@ def main():
     run_fmt.add_argument("--json", action="store_true", help="Output in JSON format")
     run.add_argument("-o", "--output", help="Write output to file (default: stdout)")
 
-    compat = sub.add_parser("check-compat", help="Check free-threading compatibility (Phase 7)")
+    compat = sub.add_parser("compat", help="Check free-threading compatibility")
     compat.add_argument("path", nargs="?", default=".", help="Project path")
+    compat.add_argument("--json", action="store_true", help="Output in JSON format")
 
     args = parser.parse_args()
 
@@ -43,9 +48,8 @@ def main():
         _do_scan(args)
     elif args.command == "run":
         _do_run(args)
-    elif args.command == "check-compat":
-        print("Not implemented: free-threading compatibility check (Phase 7)", file=sys.stderr)
-        sys.exit(1)
+    elif args.command == "compat":
+        _do_compat(args)
 
 
 def _detect_format(output_path: str | None) -> str:
@@ -96,6 +100,106 @@ def _do_scan(args):
 def _do_run(args):
     fmt = "json" if args.json else _detect_format(args.output)
     run_script(args.script, output_format=fmt)
+
+
+def _do_compat(args):
+    path = Path(args.path).resolve()
+    names: list[str] | None = None
+    toml = path / "pyproject.toml"
+    req = path / "requirements.txt"
+    if path.is_dir() and toml.is_file():
+        names = _read_deps_from_pyproject(toml)
+    elif path.is_file() and path.suffix == ".txt":
+        names = _read_deps_from_requirements(path)
+    elif path.is_file() and path.name == "pyproject.toml":
+        names = _read_deps_from_pyproject(path)
+
+    results = check_compat(names)
+
+    if args.json:
+        obj = [r.to_dict() for r in results]
+        print(_json.dumps(obj, indent=2, ensure_ascii=False))
+        return
+
+    print(f"threadcheck compat - Free-threading compatibility check")
+    print(f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    print()
+
+    can_emoji = _can_print_emoji()
+    for r in results:
+        if r.status.value == "compatible":
+            icon = _icon("✅", "[OK]", can_emoji)
+        elif r.status.value == "needs_verification":
+            icon = _icon("⚠️", "[??]", can_emoji)
+        else:
+            icon = _icon("❌", "[--]", can_emoji)
+        print(f"  {icon}  {r.name:<20} {r.reason}")
+
+    print()
+    total = len(results)
+    compat_count = sum(1 for r in results if r.status == CompatStatus.COMPATIBLE)
+    needs_v = sum(1 for r in results if r.status == CompatStatus.NEEDS_VERIFICATION)
+    not_inst = sum(1 for r in results if r.status == CompatStatus.NOT_INSTALLED)
+    print(f"Total: {total} package(s) - {compat_count} compatible, {needs_v} need verification, {not_inst} not installed")
+
+
+def _read_deps_from_pyproject(path: Path) -> list[str]:
+    try:
+        import tomllib
+    except ImportError:
+        return []
+
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    deps: list[str] = []
+    for key in ("dependencies", "optional-dependencies"):
+        section = data.get("project", {}).get(key, {})
+        if isinstance(section, dict):
+            for group in section.values():
+                deps.extend(_extract_names(group))
+        elif isinstance(section, list):
+            deps.extend(_extract_names(section))
+    return sorted(set(deps))
+
+
+def _read_deps_from_requirements(path: Path) -> list[str]:
+    names: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", "-", "git+", "http")):
+            continue
+        name = re.split(r"[<>=!~@;]", line, maxsplit=1)[0].strip()
+        if name:
+            names.append(name)
+    return sorted(set(names))
+
+
+def _extract_names(entries: list) -> list[str]:
+    import re as _re
+
+    names: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, str):
+            continue
+        name = _re.split(r"[<>=!~@;]", entry, maxsplit=1)[0].strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _can_print_emoji() -> bool:
+    try:
+        "\u2705".encode(sys.stdout.encoding)
+        return True
+    except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+        return False
+
+
+def _icon(emoji: str, fallback: str, can_emoji: bool) -> str:
+    return emoji if can_emoji else fallback
 
 
 def _write_output(path_arg: str | None, content: str):

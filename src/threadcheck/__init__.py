@@ -11,3 +11,4 @@ from ._version import __version__
 
 from .static.analyzer import analyze_path, analyze_file
 from .static.models import RaceWarning, Severity, WarningCategory
+from .compat import check_compat, FTCompatResult, CompatStatus
