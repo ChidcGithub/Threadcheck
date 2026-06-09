@@ -38,10 +38,7 @@ jobs:
           - os: windows-latest
             plat: win_amd64
             tid_src: _tid_win.py
-          - os: macos-13
-            plat: macosx_10_9_x86_64
-            tid_src: _tid_macos.py
-          - os: macos-14
+          - os: macos-latest
             plat: macosx_11_0_arm64
             tid_src: _tid_macos.py
 
