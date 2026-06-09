@@ -69,6 +69,15 @@ def test_plugin_detects_race():
 
         def test_race():
             run_racy_increment()
+            if _has:
+                from threadcheck.dynamic.tracker import ThreadCheckTracker
+                with ThreadCheckTracker._lock:
+                    alog = dict(ThreadCheckTracker._access_log)
+                    tids = list(ThreadCheckTracker._thread_clocks.keys())
+                print(f"[DBG] access_log_keys={list(alog.keys())}", flush=True)
+                print(f"[DBG] access_log_sizes={dict((k, len(v)) for k, v in alog.items())}", flush=True)
+                print(f"[DBG] thread_clocks={tids}", flush=True)
+                print(f"[DBG] tracker_active={ThreadCheckTracker._active}", flush=True)
         """,
         extra_args=["--threadcheck", "-s"],
     )
