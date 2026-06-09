@@ -1,3 +1,4 @@
+import sys
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -31,6 +32,8 @@ class ThreadCheckTracker:
 
     @classmethod
     def _current_tid(cls) -> int:
+        if sys.platform == "win32":
+            return threading.get_ident()
         ct = threading.current_thread()
         native = ct.native_id
         if native is not None:
