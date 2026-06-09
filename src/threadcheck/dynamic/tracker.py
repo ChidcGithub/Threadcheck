@@ -1,5 +1,5 @@
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .clock import VectorClock
@@ -99,8 +99,14 @@ class ThreadCheckTracker:
         cls._active = False
 
     @classmethod
+    def _race_key(cls, r1: AccessRecord, r2: AccessRecord) -> tuple:
+        tid1, tid2 = sorted([r1.thread_id, r2.thread_id])
+        loc1, loc2 = sorted([r1.location, r2.location])
+        return (r1.var_name, tid1, tid2, loc1, loc2)
+
+    @classmethod
     def detect_races(cls) -> list[tuple[str, AccessRecord, AccessRecord]]:
-        races: list[tuple[str, AccessRecord, AccessRecord]] = []
+        raw: list[tuple[str, AccessRecord, AccessRecord]] = []
         with cls._lock:
             for var_name, records in cls._access_log.items():
                 for i, r1 in enumerate(records):
@@ -108,7 +114,16 @@ class ThreadCheckTracker:
                         if r1.thread_id != r2.thread_id:
                             if r1.operation == "write" or r2.operation == "write":
                                 if r1.clock.conflicts_with(r2.clock):
-                                    races.append((var_name, r1, r2))
+                                    raw.append((var_name, r1, r2))
+
+        seen: set[tuple] = set()
+        races: list[tuple[str, AccessRecord, AccessRecord]] = []
+        for entry in raw:
+            _, r1, r2 = entry
+            key = cls._race_key(r1, r2)
+            if key not in seen:
+                seen.add(key)
+                races.append(entry)
         return races
 
     @classmethod
@@ -117,10 +132,23 @@ class ThreadCheckTracker:
         if not races:
             return "No data races detected"
 
+        overlap = Counter()
+        with cls._lock:
+            for var_name, records in cls._access_log.items():
+                for i, r1 in enumerate(records):
+                    for r2 in records[i + 1 :]:
+                        if r1.thread_id != r2.thread_id:
+                            if r1.operation == "write" or r2.operation == "write":
+                                if r1.clock.conflicts_with(r2.clock):
+                                    key = cls._race_key(r1, r2)
+                                    overlap[key] += 1
+
         lines = ["Data races detected:", ""]
         for var_name, r1, r2 in races:
             f1, l1 = r1.location
             f2, l2 = r2.location
+            key = cls._race_key(r1, r2)
+            count = overlap.get(key, 0)
             lines.append(f"  [!] `{var_name}`")
             lines.append(
                 f"      Thread-{r1.thread_id} ({r1.operation})"
@@ -130,5 +158,14 @@ class ThreadCheckTracker:
                 f"      Thread-{r2.thread_id} ({r2.operation})"
                 f" at {f2}:{l2}"
             )
+            if count > 1:
+                lines.append(f"      ({count} overlapping accesses)")
             lines.append("")
+
+        total_unique = len(races)
+        total_overlap = sum(overlap.values())
+        lines.append(
+            f"Summary: {total_unique} unique race pair(s), "
+            f"{total_overlap} total overlapping access(es)"
+        )
         return "\n".join(lines)
