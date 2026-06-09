@@ -2,8 +2,9 @@
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-76%2F76-passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows%20%7C%20macos-lightgrey)]()
+[![CI](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml/badge.svg)](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-000000)](https://github.com/astral-sh/ruff)
 
 Python 并发竞态检测器，面向 free-threading（无 GIL）时代。通过静态分析和运行时插桩，检测多线程 Python 程序中对共享可变状态的并发访问。
 

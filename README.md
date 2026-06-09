@@ -2,14 +2,8 @@
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-76%2F76-passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows%20%7C%20macos-lightgrey)]()
 [![CI](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml/badge.svg)](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml)
-[![Release](https://github.com/ChidcGithub/Threadcheck/actions/workflows/release.yml/badge.svg)](https://github.com/ChidcGithub/Threadcheck/actions/workflows/release.yml)
-[![PyPI](https://img.shields.io/pypi/v/threadcheck)](https://pypi.org/project/threadcheck/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/threadcheck)](https://pypi.org/project/threadcheck/)
-[![GitHub stars](https://img.shields.io/github/stars/ChidcGithub/Threadcheck?style=social)](https://github.com/ChidcGithub/Threadcheck)
-[![Last commit](https://img.shields.io/github/last-commit/ChidcGithub/Threadcheck)](https://github.com/ChidcGithub/Threadcheck)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000)](https://github.com/astral-sh/ruff)
 
 Python data race detector for the free-threading (no-GIL) era. Detects concurrent access to shared mutable state in multi-threaded Python programs through static analysis and runtime instrumentation.
