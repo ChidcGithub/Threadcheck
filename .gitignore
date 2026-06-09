@@ -23,3 +23,8 @@ Thumbs.db
 .coverage
 htmlcov/
 tmp_test_plugin/
+tmp_diagnose/
+.github/tmp_diagnose/
+
+# Lock files
+uv.lock
