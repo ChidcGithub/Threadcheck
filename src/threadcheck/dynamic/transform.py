@@ -4,11 +4,17 @@ import ast
 _LOCK_NAMES = frozenset({"Lock", "RLock", "Semaphore", "BoundedSemaphore"})
 
 
+_TRACKER_IMPORT = ast.parse(
+    "from threadcheck.dynamic.tracker import ThreadCheckTracker as _threadcheck_tracker"
+).body[0]
+
+
 class TrackInjector:
     def __init__(self, filename: str = "<unknown>"):
         self.filename = filename
 
     def transform(self, tree: ast.Module) -> ast.Module:
+        tree.body.insert(0, _TRACKER_IMPORT)
         scopes = {}
         self._collect_scopes(tree, scopes)
         self._inject(tree, scopes)
