@@ -95,6 +95,17 @@ if not has_tracker:
     print(f"  meta_path[0]: {type(sys.meta_path[0]).__name__}")
     sys.exit(1)
 
+# Show instrumented source of the inc function
+import ast, textwrap as _tw
+_rh_source = Path(__file__).resolve().parent.parent.parent / "tmp_test_plugin" / "race_helpers.py"
+_rh_text = _rh_source.read_text(encoding="utf-8")
+from threadcheck.dynamic.transform import transform_source
+_print_transformed = transform_source(_rh_text, str(_rh_source))
+print("--- transformed source (first 30 lines) ---")
+for _i, _line in enumerate(_print_transformed.splitlines()[:30]):
+    print(f"  {_i+1}: {_line}")
+print("--- end ---")
+
 ThreadCheckTracker.reset_logs()
 test_mod.test_race()
 races = ThreadCheckTracker.detect_races()
@@ -105,10 +116,20 @@ for var, r1, r2 in races:
 if not races:
     print(f"access_log: {dict((k, len(v)) for k, v in ThreadCheckTracker._access_log.items())}")
     print(f"thread_clocks: {list(ThreadCheckTracker._thread_clocks.keys())}")
-    # Show thread_ids from records to diagnose threading.local issue
     for var, recs in ThreadCheckTracker._access_log.items():
         all_tids = set(r.thread_id for r in recs)
         print(f"  thread_ids in '{var}': {len(all_tids)} unique ids: {all_tids}")
+    # Plain threading test (no instrumentation)
+    import threading as _th
+    _plain_results = []
+    _plain_lock = _th.Lock()
+    def _plain_worker():
+        with _plain_lock:
+            _plain_results.append(_th.get_ident())
+    _plain_threads = [_th.Thread(target=_plain_worker) for _ in range(3)]
+    for _t in _plain_threads: _t.start()
+    for _t in _plain_threads: _t.join()
+    print(f"  plain_threads_work: {len(set(_plain_results))} unique tids: {set(_plain_results)}")
 
 ThreadCheckTracker.reset()
 uninstall_hook(hook)
