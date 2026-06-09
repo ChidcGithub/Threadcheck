@@ -28,8 +28,14 @@ def run_script(script_path: str, output_format: str = "text"):
     code = compile(tree, filename, "exec")
 
     ThreadCheckTracker.start()
+    globals_dict = {
+        "__name__": "__main__",
+        "__file__": filename,
+        "__builtins__": __builtins__,
+        "_threadcheck_tracker": ThreadCheckTracker,
+    }
     try:
-        exec(code, {"_threadcheck_tracker": ThreadCheckTracker, "__file__": filename})
+        exec(code, globals_dict)
     except SystemExit:
         pass
     finally:

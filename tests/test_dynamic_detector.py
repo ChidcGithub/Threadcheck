@@ -136,3 +136,23 @@ def test_no_race_with_nested_locks():
         f"Expected 0 races with nested locks, got {count}\n"
         f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
     )
+
+
+def test_name_main_guard_executes():
+    """Script with if __name__ == '__main__' guard must execute when run via threadcheck run."""
+    from threadcheck.dynamic.__main__ import run_script
+
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        has_race = run_script(
+            str(FIXTURES / "name_main_guard.py"),
+            output_format="text",
+        )
+    output = buf.getvalue()
+    assert has_race, (
+        f"Expected races detected in name_main_guard.py, got none.\n"
+        f"If the __name__ guard isn't working, the threads never run.\n"
+        f"Output:\n{output}"
+    )
+    assert "Result:" in output, "Script with __name__ guard did not execute (Result: not found)"
