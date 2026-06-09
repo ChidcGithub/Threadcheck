@@ -67,11 +67,10 @@ class ThreadCheckFinder(importlib.abc.MetaPathFinder):
                 entry = "."
             base = Path(entry) / f"{fullname.replace('.', '/')}.py"
             if base.exists() and self._should_instrument(base):
-                spec = importlib.machinery.ModuleSpec(
+                spec = importlib.util.spec_from_file_location(
                     fullname,
-                    ThreadCheckLoader(self.tracker),
-                    origin=str(base),
-                    is_package=False,
+                    str(base),
+                    loader=ThreadCheckLoader(self.tracker),
                 )
                 return spec
         return None
