@@ -33,7 +33,7 @@ def test_transform_injects_lock_acquire():
     assert "_threadcheck_tracker.lock_release" in result
 
 
-def _run_transformed_fixture(fixture_name: str) -> int:
+def _run_transformed_fixture(fixture_name: str) -> tuple[int, str, str]:
     source = (FIXTURES / fixture_name).read_text(encoding="utf-8")
     filename = str(FIXTURES / fixture_name)
 
@@ -41,9 +41,8 @@ def _run_transformed_fixture(fixture_name: str) -> int:
     TrackInjector(filename=filename).transform(tree)
     ast.fix_missing_locations(tree)
 
-    # Inject the tracker import at the top so that ``_threadcheck_tracker``
-    # is a proper module-level global. Functions defined in this module will
-    # resolve it via ``__globals__`` even when running in child threads.
+    # Write the transformed source to a temp file. The preamble makes
+    # ``_threadcheck_tracker`` available as a regular module-level global.
     preamble = (
         "import sys\n"
         f"sys.path.insert(0, {str(PROJECT_ROOT)!r})\n"
@@ -59,19 +58,31 @@ def _run_transformed_fixture(fixture_name: str) -> int:
         f.write(full_source)
         temp_path = f.name
 
+    # The runner injects ``_threadcheck_tracker`` into builtins so that
+    # functions executing in child threads can always resolve the name
+    # regardless of how ``exec_module`` sets up ``__globals__``.
     runner = (
         f"import sys; sys.path.insert(0, {str(PROJECT_ROOT)!r})\n"
         "from threadcheck.dynamic.tracker import ThreadCheckTracker\n"
+        "import builtins\n"
+        "builtins._threadcheck_tracker = ThreadCheckTracker\n"
         f"import importlib.util\n"
         f"spec = importlib.util.spec_from_file_location('_test_fixture', {temp_path!r})\n"
         f"mod = importlib.util.module_from_spec(spec)\n"
+        f"mod._threadcheck_tracker = ThreadCheckTracker\n"
         f"sys.modules['_test_fixture'] = mod\n"
+        "import threading, traceback\n"
+        "def _thread_hook(args):\n"
+        "    traceback.print_exception(args.exc_type, args.exc_value, args.exc_tb)\n"
+        "threading.excepthook = _thread_hook\n"
         "ThreadCheckTracker.start()\n"
         "try:\n"
         "    spec.loader.exec_module(mod)\n"
         "finally:\n"
         "    ThreadCheckTracker.stop()\n"
-        "print(len(ThreadCheckTracker.detect_races()))\n"
+        "count = len(ThreadCheckTracker.detect_races())\n"
+        "print(f'DIAG: python={{sys.version}}')\n"
+        "print(f'RACES:{count}')\n"
         "ThreadCheckTracker.reset()\n"
     )
 
@@ -84,16 +95,22 @@ def _run_transformed_fixture(fixture_name: str) -> int:
             raise RuntimeError(
                 f"Subprocess failed:\nstdout:{result.stdout}\nstderr:{result.stderr}"
             )
-        return int(result.stdout.strip())
+        lines = result.stdout.strip().splitlines()
+        count_line = next((l for l in lines if l.startswith("RACES:")), "RACES:0")
+        count = int(count_line.split(":", 1)[1])
+        return count, result.stdout, result.stderr
     finally:
         os.unlink(temp_path)
 
 
 def test_detect_race_dynamic():
-    count = _run_transformed_fixture("dynamic_race.py")
-    assert count > 0, f"Expected races > 0, got {count}"
+    count, stdout, stderr = _run_transformed_fixture("dynamic_race.py")
+    assert count > 0, (
+        f"Expected races > 0, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )
 
 
 def test_no_race_when_locked():
-    count = _run_transformed_fixture("dynamic_safe.py")
+    count, _, _ = _run_transformed_fixture("dynamic_safe.py")
     assert count == 0, f"Expected 0 races, got {count}"
