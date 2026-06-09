@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 """
-threadcheck demo — showcase static scan + dynamic run in one place.
+threadcheck demo — show static scan + dynamic run.
 
 Usage:
     python demo/run_demo.py
-
-This runs ``threadcheck scan`` and ``threadcheck run`` on
-``demo/race_example.py`` and prints the results.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,19 +20,24 @@ def run(cmd: list[str], label: str):
     print(f"\n{BANNER}")
     print(f"  {label}")
     print(f"{BANNER}\n")
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(
         [sys.executable, "-m", "threadcheck", *cmd, str(SCRIPT)],
-        capture_output=True, text=True, cwd=ROOT,
+        capture_output=True,
+        encoding="utf-8",
+        env=env,
+        cwd=ROOT,
     )
-    out = (result.stdout + result.stderr).strip()
-    print(out if out else "(no output)")
+    out = (result.stdout or "") + (result.stderr or "")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    print(out.strip() or "(no output)")
     if result.returncode != 0:
         print(f"  (exit code {result.returncode})")
 
 
 def main():
-    run(["scan"], "threadcheck scan — 静态分析竞态条件")
-    run(["run"], "threadcheck run   — 动态检测竞态条件")
+    run(["scan"], "threadcheck scan - static analysis")
+    run(["run"], "threadcheck run   - dynamic detection")
 
 
 if __name__ == "__main__":
