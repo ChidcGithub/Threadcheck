@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[test]"
+      - run: python -m pytest tests/ -v
+
+  release:
+    name: Create Release & Publish to PyPI
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        run: |
+          echo "## What's Changed" > release_body.md
+          echo "" >> release_body.md
+
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          while IFS= read -r ENTRY; do
+            [ -z "$ENTRY" ] && continue
+            MSG="${ENTRY%%|||*}"
+            HASH="${ENTRY##*|||}"
+
+            TYPE="other"
+            case "$MSG" in
+              "feat"*)   TYPE="feat"   ;;
+              "fix"*)    TYPE="fix"    ;;
+              "docs"*)   TYPE="docs"   ;;
+              "style"*)  TYPE="style"  ;;
+              "refactor"*) TYPE="refactor" ;;
+              "perf"*)   TYPE="perf"   ;;
+              "test"*)   TYPE="test"   ;;
+              "ci"*)     TYPE="ci"     ;;
+              "chore"*)  TYPE="chore"  ;;
+              "revert"*) TYPE="revert" ;;
+            esac
+
+            echo "- ${MSG} (\`${HASH}\`)" >> "/tmp/changelog_${TYPE}.txt"
+          done <<< "$(git log ${RANGE} --format='%s|||%h')"
+
+          declare -A LABEL
+          LABEL[feat]="Features"
+          LABEL[fix]="Bug Fixes"
+          LABEL[docs]="Documentation"
+          LABEL[style]="Style"
+          LABEL[refactor]="Refactor"
+          LABEL[perf]="Performance"
+          LABEL[test]="Tests"
+          LABEL[ci]="CI/CD"
+          LABEL[chore]="Chores"
+          LABEL[revert]="Reverts"
+          LABEL[other]="Other"
+
+          for T in feat fix docs refactor perf test ci style chore revert other; do
+            F="/tmp/changelog_${T}.txt"
+            if [ -f "$F" ]; then
+              printf "\n### %s\n\n" "${LABEL[$T]}" >> release_body.md
+              cat "$F" >> release_body.md
+            fi
+          done
+
+      - name: Get repository size
+        id: repo_size
+        run: |
+          SIZE=$(curl -s \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}" \
+            | jq '.size')
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Build time
+        id: build_time
+        run: |
+          echo "time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Append metadata
+        run: |
+          cat >> release_body.md << EOF
+
+          ---
+          **Build Time:** ${{ steps.build_time.outputs.time }}
+          **Repository Size:** ${{ steps.repo_size.outputs.size }} KB
+          EOF
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: |
+          pip install build
+          python -m build
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_body.md
+          files: dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
