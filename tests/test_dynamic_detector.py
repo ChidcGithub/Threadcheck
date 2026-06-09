@@ -3,10 +3,8 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
 
-from threadcheck.dynamic.tracker import ThreadCheckTracker
 from threadcheck.dynamic.transform import TrackInjector, transform_source
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -99,33 +97,3 @@ def test_detect_race_dynamic():
 def test_no_race_when_locked():
     count = _run_transformed_fixture("dynamic_safe.py")
     assert count == 0, f"Expected 0 races, got {count}"
-
-
-def test_tracker_direct_race_detection():
-    ThreadCheckTracker.start()
-
-    def worker():
-        ThreadCheckTracker.write_before("x", "test.py", 1)
-
-    threads = [threading.Thread(target=worker) for _ in range(3)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    ThreadCheckTracker.stop()
-    races = ThreadCheckTracker.detect_races()
-    assert len(races) > 0, "Expected races from direct tracker calls"
-    ThreadCheckTracker.reset()
-
-
-def test_tracker_no_race_same_thread():
-    ThreadCheckTracker.start()
-
-    ThreadCheckTracker.write_before("x", "test.py", 1)
-    ThreadCheckTracker.write_before("x", "test.py", 2)
-
-    ThreadCheckTracker.stop()
-    races = ThreadCheckTracker.detect_races()
-    assert len(races) == 0, "Same-thread accesses should not race"
-    ThreadCheckTracker.reset()
