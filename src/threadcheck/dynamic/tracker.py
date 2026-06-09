@@ -30,20 +30,27 @@ class ThreadCheckTracker:
         cls._active = False
 
     @classmethod
-    def _get_clock(cls) -> VectorClock:
-        tid = threading.get_ident()
+    def _current_tid(cls) -> int:
+        ct = threading.current_thread()
+        native = ct.native_id
+        if native is not None:
+            return native
+        return id(ct)
+
+    @classmethod
+    def _get_clock(cls) -> tuple[VectorClock, int]:
+        tid = cls._current_tid()
         if tid not in cls._thread_clocks:
             with cls._lock:
                 if tid not in cls._thread_clocks:
                     cls._thread_clocks[tid] = VectorClock()
-        return cls._thread_clocks[tid]
+        return cls._thread_clocks[tid], tid
 
     @classmethod
     def write_before(cls, var_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        clock = cls._get_clock()
-        tid = threading.get_ident()
+        clock, tid = cls._get_clock()
         clock.tick(tid)
         record = AccessRecord(
             var_name=var_name,
@@ -59,8 +66,7 @@ class ThreadCheckTracker:
     def read_before(cls, var_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        clock = cls._get_clock()
-        tid = threading.get_ident()
+        clock, tid = cls._get_clock()
         clock.tick(tid)
         record = AccessRecord(
             var_name=var_name,
@@ -76,8 +82,7 @@ class ThreadCheckTracker:
     def lock_acquire(cls, lock_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        tid = threading.get_ident()
-        clock = cls._get_clock()
+        clock, tid = cls._get_clock()
         with cls._lock:
             if lock_name in cls._lock_clocks:
                 clock.merge(cls._lock_clocks[lock_name])
@@ -87,8 +92,7 @@ class ThreadCheckTracker:
     def lock_release(cls, lock_name: str, file: str = "", line: int = 0):
         if not cls._active:
             return
-        clock = cls._get_clock()
-        tid = threading.get_ident()
+        clock, tid = cls._get_clock()
         with cls._lock:
             cls._lock_clocks[lock_name] = clock.copy()
 
