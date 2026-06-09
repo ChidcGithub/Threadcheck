@@ -46,15 +46,24 @@ class ThreadCheckLoader(importlib.abc.Loader):
 
 
 class ThreadCheckFinder(importlib.abc.MetaPathFinder):
-    def __init__(self, tracker=None):
+    def __init__(self, tracker=None, include_paths=None):
         self.tracker = tracker or ThreadCheckTracker
+        self._include_paths = (
+            [Path(p).resolve() for p in include_paths] if include_paths else []
+        )
+
+    def _should_instrument(self, filepath: Path) -> bool:
+        if not self._include_paths:
+            return True
+        resolved = filepath.resolve()
+        return any(_is_under(resolved, inc) for inc in self._include_paths)
 
     def find_spec(self, fullname, path, target=None):
         for entry in (path or sys.path):
             if entry == "":
                 entry = "."
             base = Path(entry) / f"{fullname.replace('.', '/')}.py"
-            if base.exists():
+            if base.exists() and self._should_instrument(base):
                 spec = importlib.util.spec_from_file_location(
                     fullname,
                     str(base),
@@ -64,8 +73,8 @@ class ThreadCheckFinder(importlib.abc.MetaPathFinder):
         return None
 
 
-def install_hook(tracker=None):
-    hook = ThreadCheckFinder(tracker)
+def install_hook(tracker=None, include_paths=None):
+    hook = ThreadCheckFinder(tracker, include_paths)
     sys.meta_path.insert(0, hook)
     return hook
 
@@ -73,3 +82,11 @@ def install_hook(tracker=None):
 def uninstall_hook(hook):
     if hook in sys.meta_path:
         sys.meta_path.remove(hook)
+
+
+def _is_under(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False

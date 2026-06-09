@@ -99,6 +99,12 @@ class ThreadCheckTracker:
         cls._active = False
 
     @classmethod
+    def reset_logs(cls):
+        with cls._lock:
+            cls._access_log.clear()
+            cls._thread_clocks.clear()
+
+    @classmethod
     def _race_key(cls, r1: AccessRecord, r2: AccessRecord) -> tuple:
         tid1, tid2 = sorted([r1.thread_id, r2.thread_id])
         loc1, loc2 = sorted([r1.location, r2.location])
