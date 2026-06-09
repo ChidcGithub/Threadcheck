@@ -117,7 +117,8 @@ def test_plugin_no_race_when_locked():
                     threads.append(t)
                 for t in threads:
                     t.join()
-                return counter
+                with lock:
+                    return counter
         """),
         encoding="utf-8",
     )

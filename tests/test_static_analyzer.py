@@ -108,3 +108,41 @@ def test_confidence_nonlocal_race():
     nonlocal_warns = [w for w in warnings if w.category == WarningCategory.UNSAFE_NONLOCAL]
     assert len(nonlocal_warns) > 0
     assert all(w.confidence == Confidence.HIGH for w in nonlocal_warns)
+
+
+def test_cross_module_race_detected():
+    """Thread target in one file, function in another — should detect race with HIGH confidence."""
+    from threadcheck.static.analyzer import _collect_thread_targets, analyze_file
+
+    main = FIXTURES / "cross_module_main.py"
+    worker = FIXTURES / "cross_module_worker.py"
+    files = [main, worker]
+    global_targets = _collect_thread_targets(files)
+    assert "run" in global_targets, f"Expected 'run' in targets, got {global_targets}"
+
+    warnings = analyze_file(worker, global_targets)
+    categories = {w.category for w in warnings}
+    assert WarningCategory.UNSAFE_GLOBAL in categories, (
+        f"Expected UNSAFE_GLOBAL in worker, got {categories}"
+    )
+    unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    assert all(w.confidence == Confidence.HIGH for w in unsafe)
+
+
+def test_nested_locks_suppress_global_race():
+    warnings = analyze_file(FIXTURES / "nested_locks.py")
+    unsafe_global = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    assert len(unsafe_global) == 0, (
+        f"Expected 0 UNSAFE_GLOBAL warnings with nested locks, got {len(unsafe_global)}"
+    )
+
+
+def test_executor_submit_target_detected():
+    """executor.submit(func) should extract func as a thread target."""
+    warnings = analyze_file(FIXTURES / "futures_race.py")
+    categories = {w.category for w in warnings}
+    assert WarningCategory.UNSAFE_GLOBAL in categories, (
+        f"Expected UNSAFE_GLOBAL for futures_race, got {categories}"
+    )
+    unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    assert all(w.confidence == Confidence.HIGH for w in unsafe)

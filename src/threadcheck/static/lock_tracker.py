@@ -1,6 +1,8 @@
 import ast
 
-_LOCK_CLASSES = frozenset({"Lock", "RLock", "Semaphore", "BoundedSemaphore"})
+_LOCK_CLASSES = frozenset({
+    "Lock", "RLock", "Semaphore", "BoundedSemaphore",
+})
 
 
 class LockTracker(ast.NodeVisitor):

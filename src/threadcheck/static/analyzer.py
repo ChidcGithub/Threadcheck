@@ -19,9 +19,9 @@ _SKIP_DIRS = frozenset({
 
 
 class AnalysisContext:
-    def __init__(self, filepath: Path, tree: ast.Module):
+    def __init__(self, filepath: Path, tree: ast.Module, global_thread_targets: set[str] | None = None):
         self.filepath = filepath
-        self._thread_targets: set[str] = set()
+        self._thread_targets: set[str] = set(global_thread_targets or ())
         self._has_thread = False
         self._find_thread_targets(tree)
         self.lock_tracker = LockTracker()
@@ -50,9 +50,12 @@ class AnalysisContext:
                 attr_name = getattr(node.func, "attr", None)
                 if attr_name in ("submit", "map"):
                     self._has_thread = True
+                    args = node.args
+                    if args and isinstance(args[0], ast.Name):
+                        self._thread_targets.add(args[0].id)
 
 
-def analyze_file(filepath: Path) -> list[RaceWarning]:
+def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None) -> list[RaceWarning]:
     try:
         source = filepath.read_text(encoding="utf-8")
     except Exception:
@@ -63,7 +66,7 @@ def analyze_file(filepath: Path) -> list[RaceWarning]:
     except SyntaxError:
         return []
 
-    context = AnalysisContext(filepath, tree)
+    context = AnalysisContext(filepath, tree, global_thread_targets)
 
     all_warnings: list[RaceWarning] = []
 
@@ -81,6 +84,31 @@ def analyze_file(filepath: Path) -> list[RaceWarning]:
     return all_warnings
 
 
+def _collect_thread_targets(files: list[Path]) -> set[str]:
+    targets: set[str] = set()
+    for py_file in files:
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(py_file))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "Thread":
+                    for kw in node.keywords:
+                        if kw.arg == "target":
+                            if isinstance(kw.value, ast.Name):
+                                targets.add(kw.value.id)
+                            elif isinstance(kw.value, ast.Attribute):
+                                targets.add(kw.value.attr)
+                attr_name = getattr(node.func, "attr", None)
+                if attr_name in ("submit", "map"):
+                    args = node.args
+                    if args and isinstance(args[0], ast.Name):
+                        targets.add(args[0].id)
+    return targets
+
+
 def analyze_path(path: str) -> list[RaceWarning]:
     p = Path(path).resolve()
     all_warnings: list[RaceWarning] = []
@@ -89,10 +117,10 @@ def analyze_path(path: str) -> list[RaceWarning]:
         if p.suffix == ".py":
             all_warnings.extend(analyze_file(p))
     elif p.is_dir():
-        for py_file in sorted(p.rglob("*.py")):
-            if _should_skip(py_file):
-                continue
-            all_warnings.extend(analyze_file(py_file))
+        py_files = [f for f in sorted(p.rglob("*.py")) if not _should_skip(f)]
+        global_targets = _collect_thread_targets(py_files)
+        for py_file in py_files:
+            all_warnings.extend(analyze_file(py_file, global_targets))
 
     return all_warnings
 

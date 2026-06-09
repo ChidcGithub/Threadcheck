@@ -45,3 +45,4 @@ def run_script(script_path: str, output_format: str = "text"):
         print(format_dynamic_races(races, alog))
 
     ThreadCheckTracker.reset()
+    return len(races) > 0

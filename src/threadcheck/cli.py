@@ -96,10 +96,15 @@ def _do_scan(args):
     print()
     print(f"Total: {total} issue(s) ({errors} error(s), {warns} warning(s), {infos} info)")
 
+    if warns > 0 or errors > 0:
+        sys.exit(1)
+
 
 def _do_run(args):
     fmt = "json" if args.json else _detect_format(args.output)
-    run_script(args.script, output_format=fmt)
+    has_race = run_script(args.script, output_format=fmt)
+    if has_race:
+        sys.exit(1)
 
 
 def _do_compat(args):
@@ -141,6 +146,9 @@ def _do_compat(args):
     needs_v = sum(1 for r in results if r.status == CompatStatus.NEEDS_VERIFICATION)
     not_inst = sum(1 for r in results if r.status == CompatStatus.NOT_INSTALLED)
     print(f"Total: {total} package(s) - {compat_count} compatible, {needs_v} need verification, {not_inst} not installed")
+
+    if needs_v > 0:
+        sys.exit(1)
 
 
 def _read_deps_from_pyproject(path: Path) -> list[str]:

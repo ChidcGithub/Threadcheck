@@ -26,6 +26,12 @@ def test_transform_injects_write_before():
     assert "_threadcheck_tracker.write_before" in result
 
 
+def test_transform_injects_read_before():
+    source = (FIXTURES / "dynamic_read_race.py").read_text(encoding="utf-8")
+    result = transform_source(source, str(FIXTURES / "dynamic_read_race.py"))
+    assert "_threadcheck_tracker.read_before" in result
+
+
 def test_transform_injects_lock_acquire():
     source = (FIXTURES / "dynamic_safe.py").read_text(encoding="utf-8")
     result = transform_source(source, str(FIXTURES / "dynamic_safe.py"))
@@ -111,6 +117,22 @@ def test_detect_race_dynamic():
     )
 
 
+def test_detect_read_race_dynamic():
+    count, stdout, stderr = _run_transformed_fixture("dynamic_read_race.py")
+    assert count > 0, (
+        f"Expected read-write races > 0, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )
+
+
 def test_no_race_when_locked():
     count, _, _ = _run_transformed_fixture("dynamic_safe.py")
     assert count == 0, f"Expected 0 races, got {count}"
+
+
+def test_no_race_with_nested_locks():
+    count, stdout, stderr = _run_transformed_fixture("nested_locks.py")
+    assert count == 0, (
+        f"Expected 0 races with nested locks, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )

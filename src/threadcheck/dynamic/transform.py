@@ -64,6 +64,11 @@ class TrackInjector:
                 new.append(stmt)
                 continue
 
+            # Inject read_before for shared variable reads (not including write targets)
+            read_names = _find_read_names(stmt, shared)
+            for name in sorted(read_names):
+                new.append(_make_read_before(name, self.filename, stmt.lineno))
+
             if isinstance(stmt, ast.Assign):
                 targets = [
                     t
@@ -96,20 +101,75 @@ class TrackInjector:
                 new.append(stmt)
 
             elif isinstance(stmt, ast.With):
-                lock_name = _resolve_lock_name(stmt)
+                lock_names = _resolve_lock_names(stmt)
                 new.append(stmt)
-                if lock_name:
+                for ln in lock_names:
                     stmt.body.insert(
                         0,
-                        _make_lock_acquire(lock_name, self.filename, stmt.lineno),
+                        _make_lock_acquire(ln, self.filename, stmt.lineno),
                     )
+                for ln in reversed(lock_names):
                     stmt.body.append(
-                        _make_lock_release(lock_name, self.filename, stmt.lineno),
+                        _make_lock_release(ln, self.filename, stmt.lineno),
                     )
             else:
                 new.append(stmt)
 
         return new
+
+
+def _find_read_names(stmt: ast.AST, shared_set: set[str]) -> set[str]:
+    write_targets: set[str] = set()
+    if isinstance(stmt, ast.Assign):
+        for t in stmt.targets:
+            if isinstance(t, ast.Name) and t.id in shared_set:
+                write_targets.add(t.id)
+    elif isinstance(stmt, ast.AugAssign):
+        if isinstance(stmt.target, ast.Name) and stmt.target.id in shared_set:
+            write_targets.add(stmt.target.id)
+    elif isinstance(stmt, ast.Delete):
+        for t in stmt.targets:
+            if isinstance(t, ast.Name) and t.id in shared_set:
+                write_targets.add(t.id)
+
+    reads: set[str] = set()
+    _collect_read_names(stmt, shared_set, reads)
+    return reads - write_targets
+
+
+_STMT_WITH_BODY = (
+    ast.With, ast.For, ast.AsyncFor, ast.While, ast.If,
+    ast.Try, ast.TryStar,
+    ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+)
+
+
+def _collect_read_names(node: ast.AST, shared_set: set[str], out: set[str]):
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+        if node.id in shared_set:
+            out.add(node.id)
+    if isinstance(node, _STMT_WITH_BODY):
+        return
+    for child in ast.iter_child_nodes(node):
+        _collect_read_names(child, shared_set, out)
+
+
+def _make_read_before(var_name: str, filename: str, lineno: int) -> ast.Expr:
+    return ast.Expr(
+        value=ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id="_threadcheck_tracker", ctx=ast.Load()),
+                attr="read_before",
+                ctx=ast.Load(),
+            ),
+            args=[
+                ast.Constant(value=var_name),
+                ast.Constant(value=filename),
+                ast.Constant(value=lineno),
+            ],
+            keywords=[],
+        ),
+    )
 
 
 def _make_write_before(var_name: str, filename: str, lineno: int) -> ast.Expr:
@@ -166,17 +226,18 @@ def _make_lock_release(lock_name: str, filename: str, lineno: int) -> ast.Expr:
     )
 
 
-def _resolve_lock_name(with_stmt: ast.With) -> str | None:
+def _resolve_lock_names(with_stmt: ast.With) -> list[str]:
+    names: list[str] = []
     for item in with_stmt.items:
         expr = item.context_expr
         if isinstance(expr, ast.Name):
-            return expr.id
-        if isinstance(expr, ast.Call):
+            names.append(expr.id)
+        elif isinstance(expr, ast.Call):
             if isinstance(expr.func, ast.Name) and expr.func.id in _LOCK_NAMES:
-                return ast.unparse(expr)
-            if isinstance(expr.func, ast.Attribute) and expr.func.attr in _LOCK_NAMES:
-                return ast.unparse(expr)
-    return None
+                names.append(ast.unparse(expr))
+            elif isinstance(expr.func, ast.Attribute) and expr.func.attr in _LOCK_NAMES:
+                names.append(ast.unparse(expr))
+    return names
 
 
 def transform_source(source: str, filename: str = "<unknown>") -> str:
