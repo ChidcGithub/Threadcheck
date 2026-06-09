@@ -62,7 +62,7 @@ threadcheck scan my_project/
 
 ```
   [1/2] my_project/counter.py
-  ─────────────────────────────────
+  ---------------------------------
     [!] HIGH [unsafe_global] line 8:8
           Global variable `counter` modified without lock
           suggestion: Use `threading.Lock()` to protect `counter`
@@ -70,7 +70,7 @@ threadcheck scan my_project/
           Thread creation detected (target=increment)
 
   [2/2] my_project/worker.py
-  ─────────────────────────────────
+  ---------------------------------
     [!] HIGH [shared_mutable] line 15:8
           Module-level mutable object `results.append()` called from multiple threads
 
@@ -91,9 +91,9 @@ threadcheck run my_script.py
 Data races detected:
 
   [!] `counter`
-    ├── Thread-28928 (write) at my_script.py:8
-    ├── Thread-9888 (write) at my_script.py:8
-    └── No happens-before relationship between accesses
+    |--- Thread-28928 (write) at my_script.py:8
+    |--- Thread-9888 (write) at my_script.py:8
+    \--- No happens-before relationship between accesses
        (10000 overlapping accesses)
 ```
 
@@ -117,9 +117,9 @@ threadcheck compat
 threadcheck compat - Free-threading compatibility check
 Python 3.13.10
 
-  ✅  numpy                 C extension has free-threading tag (cp313t-)
-  ⚠️  torch                 C extension without free-threading tag
-  ✅  pytest                pure Python, no C extensions
+  [OK] numpy                 C extension has free-threading tag (cp313t-)
+  [??] torch                 C extension without free-threading tag
+  [OK] pytest                pure Python, no C extensions
 
 Total: 3 package(s) - 2 compatible, 1 need verification, 0 not installed
 ```
@@ -260,9 +260,9 @@ python -m pytest tests/ --threadcheck
 
 1. 从 `pyproject.toml` 或 `requirements.txt` 解析项目依赖
 2. 对每个已安装包，扫描 C 扩展文件（`.pyd`/`.so`）
-3. 无 C 扩展 → ✅ COMPATIBLE
-4. C 扩展文件名含 free-threading ABI 标签（`cp313t-`/`cpython-313t-`）→ ✅ COMPATIBLE
-5. 否则 → ⚠️ NEEDS_VERIFICATION
+3. 无 C 扩展 -> COMPATIBLE
+4. C 扩展文件名含 free-threading ABI 标签（`cp313t-`/`cpython-313t-`）-> COMPATIBLE
+5. 否则 -> NEEDS_VERIFICATION
 
 ---
 
@@ -270,46 +270,46 @@ python -m pytest tests/ --threadcheck
 
 ```
 threadcheck/
-├── pyproject.toml
-├── src/threadcheck/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── _version.py           # 版本唯一来源
-│   ├── _tid.py               # 平台线程 ID（CI 中按平台替换）
-│   ├── cli.py                # 参数解析与调度
-│   ├── config.py             # .threadcheckignore + pyproject.toml 加载器
-│   ├── pytest_plugin.py      # --threadcheck pytest 标志
-│   ├── static/
-│   │   ├── analyzer.py       # 静态分析入口
-│   │   ├── visitors.py       # 5 个 AST 遍历器
-│   │   ├── lock_tracker.py   # 锁使用分析
-│   │   └── models.py         # RaceWarning, Severity, Confidence
-│   ├── dynamic/
-│   │   ├── __main__.py       # 动态检测入口
-│   │   ├── transform.py      # AST 变换引擎
-│   │   ├── tracker.py        # 运行时追踪器 + 向量时钟
-│   │   ├── clock.py          # 向量时钟实现
-│   │   └── hook.py           # sys.meta_path import hook
-│   ├── compat/
-│   │   ├── checker.py        # C 扩展 FT 标签扫描
-│   │   └── models.py         # FTCompatResult, CompatStatus
-│   └── reporting/
-│       ├── formatter.py      # 终端 / JSON 输出
-│       ├── sarif.py          # SARIF v2.1.0 输出
-│       └── html.py           # HTML 报告输出
-├── tests/
-│   ├── fixtures/             # 11 个含已知 race 的样本
-│   ├── test_static_analyzer.py
-│   ├── test_dynamic_detector.py
-│   ├── test_formatter.py
-│   ├── test_sarif.py
-│   ├── test_compat.py
-│   ├── test_config.py
-│   └── test_pytest_plugin.py
-├── demo/
-│   ├── race_example.py       # 含故意 race 的样本
-│   └── run_demo.py           # 演示所有输出格式
-└── README.md / README_CN.md
+|--- pyproject.toml
+|--- src/threadcheck/
+|   |--- __init__.py
+|   |--- __main__.py
+|   |--- _version.py           # 版本唯一来源
+|   |--- _tid.py               # 平台线程 ID（CI 中按平台替换）
+|   |--- cli.py                # 参数解析与调度
+|   |--- config.py             # .threadcheckignore + pyproject.toml 加载器
+|   |--- pytest_plugin.py      # --threadcheck pytest 标志
+|   |--- static/
+|   |   |--- analyzer.py       # 静态分析入口
+|   |   |--- visitors.py       # 5 个 AST 遍历器
+|   |   |--- lock_tracker.py   # 锁使用分析
+|   |   \--- models.py         # RaceWarning, Severity, Confidence
+|   |--- dynamic/
+|   |   |--- __main__.py       # 动态检测入口
+|   |   |--- transform.py      # AST 变换引擎
+|   |   |--- tracker.py        # 运行时追踪器 + 向量时钟
+|   |   |--- clock.py          # 向量时钟实现
+|   |   \--- hook.py           # sys.meta_path import hook
+|   |--- compat/
+|   |   |--- checker.py        # C 扩展 FT 标签扫描
+|   |   \--- models.py         # FTCompatResult, CompatStatus
+|   \--- reporting/
+|       |--- formatter.py      # 终端 / JSON 输出
+|       |--- sarif.py          # SARIF v2.1.0 输出
+|       \--- html.py           # HTML 报告输出
+|--- tests/
+|   |--- fixtures/             # 11 个含已知 race 的样本
+|   |--- test_static_analyzer.py
+|   |--- test_dynamic_detector.py
+|   |--- test_formatter.py
+|   |--- test_sarif.py
+|   |--- test_compat.py
+|   |--- test_config.py
+|   \--- test_pytest_plugin.py
+|--- demo/
+|   |--- race_example.py       # 含故意 race 的样本
+|   \--- run_demo.py           # 演示所有输出格式
+\--- README.md / README_CN.md
 ```
 
 ---

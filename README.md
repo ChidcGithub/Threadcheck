@@ -4,6 +4,13 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-76%2F76-passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows%20%7C%20macos-lightgrey)]()
+[![CI](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml/badge.svg)](https://github.com/ChidcGithub/Threadcheck/actions/workflows/test.yml)
+[![Release](https://github.com/ChidcGithub/Threadcheck/actions/workflows/release.yml/badge.svg)](https://github.com/ChidcGithub/Threadcheck/actions/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/threadcheck)](https://pypi.org/project/threadcheck/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/threadcheck)](https://pypi.org/project/threadcheck/)
+[![GitHub stars](https://img.shields.io/github/stars/ChidcGithub/Threadcheck?style=social)](https://github.com/ChidcGithub/Threadcheck)
+[![Last commit](https://img.shields.io/github/last-commit/ChidcGithub/Threadcheck)](https://github.com/ChidcGithub/Threadcheck)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-000000)](https://github.com/astral-sh/ruff)
 
 Python data race detector for the free-threading (no-GIL) era. Detects concurrent access to shared mutable state in multi-threaded Python programs through static analysis and runtime instrumentation.
 
@@ -55,7 +62,7 @@ Output (grouped by file, with severity icons and per-file summary):
 
 ```
   [1/2] my_project/counter.py
-  ─────────────────────────────────
+  --------------------------------
     [!] HIGH [unsafe_global] line 8:8
           Global variable `counter` modified without lock
           suggestion: Use `threading.Lock()` to protect `counter`
@@ -63,7 +70,7 @@ Output (grouped by file, with severity icons and per-file summary):
           Thread creation detected (target=increment)
 
   [2/2] my_project/worker.py
-  ─────────────────────────────────
+  --------------------------------
     [!] HIGH [shared_mutable] line 15:8
           Module-level mutable object `results.append()` called from multiple threads
 
@@ -84,9 +91,9 @@ Output for a racing script:
 Data races detected:
 
   [!] `counter`
-    ├─ Thread-28928 (write) at my_script.py:8
-    ├─ Thread-9888 (write) at my_script.py:8
-    └─ No happens-before relationship between accesses
+    |-- Thread-28928 (write) at my_script.py:8
+    |-- Thread-9888 (write) at my_script.py:8
+    \-- No happens-before relationship between accesses
        (10000 overlapping accesses)
 ```
 
@@ -110,9 +117,9 @@ Output:
 threadcheck compat - Free-threading compatibility check
 Python 3.13.10
 
-  ✅  numpy                 C extension has free-threading tag (cp313t-)
-  ⚠️  torch                 C extension without free-threading tag
-  ✅  pytest                pure Python, no C extensions
+  [OK] numpy                 C extension has free-threading tag (cp313t-)
+  [??] torch                 C extension without free-threading tag
+  [OK] pytest                pure Python, no C extensions
 
 Total: 3 package(s) - 2 compatible, 1 need verification, 0 not installed
 ```
@@ -253,9 +260,9 @@ The plugin hooks into `pytest_runtest_call` and reports race warnings as test fa
 
 1. Parse project dependencies from `pyproject.toml` or `requirements.txt`
 2. For each installed package, scan for C extension files (`.pyd`/`.so`)
-3. If no C extensions found → ✅ COMPATIBLE
-4. If C extension filename contains free-threading ABI tag (`cp313t-`/`cpython-313t-`) → ✅ COMPATIBLE
-5. Otherwise → ⚠️ NEEDS_VERIFICATION
+3. If no C extensions found -> COMPATIBLE
+4. If C extension filename contains free-threading ABI tag (`cp313t-`/`cpython-313t-`) -> COMPATIBLE
+5. Otherwise -> NEEDS_VERIFICATION
 
 ---
 
@@ -263,46 +270,46 @@ The plugin hooks into `pytest_runtest_call` and reports race warnings as test fa
 
 ```
 threadcheck/
-├── pyproject.toml
-├── src/threadcheck/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── _version.py           # single version source
-│   ├── _tid.py               # platform thread ID (swapped per-platform in CI)
-│   ├── cli.py                # argument parsing + dispatch
-│   ├── config.py             # .threadcheckignore + pyproject.toml loader
-│   ├── pytest_plugin.py      # --threadcheck flag for pytest
-│   ├── static/
-│   │   ├── analyzer.py       # static analysis entry point
-│   │   ├── visitors.py       # 5 AST visitors
-│   │   ├── lock_tracker.py   # lock usage analysis
-│   │   └── models.py         # RaceWarning, Severity, Confidence
-│   ├── dynamic/
-│   │   ├── __main__.py       # run_script entry point
-│   │   ├── transform.py      # AST transformation engine
-│   │   ├── tracker.py        # runtime tracker with vector clocks
-│   │   ├── clock.py          # vector clock implementation
-│   │   └── hook.py           # sys.meta_path import hook
-│   ├── compat/
-│   │   ├── checker.py        # C extension FT tag scanner
-│   │   └── models.py         # FTCompatResult, CompatStatus
-│   └── reporting/
-│       ├── formatter.py      # terminal / JSON output
-│       ├── sarif.py          # SARIF v2.1.0 output
-│       └── html.py           # HTML report output
-├── tests/
-│   ├── fixtures/             # 11 fixture files with known races
-│   ├── test_static_analyzer.py
-│   ├── test_dynamic_detector.py
-│   ├── test_formatter.py
-│   ├── test_sarif.py
-│   ├── test_compat.py
-│   ├── test_config.py
-│   └── test_pytest_plugin.py
-├── demo/
-│   ├── race_example.py       # sample with intentional races
-│   └── run_demo.py           # demo runner for all output formats
-└── README.md
+|-- pyproject.toml
+|-- src/threadcheck/
+|   |-- __init__.py
+|   |-- __main__.py
+|   |-- _version.py           # single version source
+|   |-- _tid.py               # platform thread ID (swapped per-platform in CI)
+|   |-- cli.py                # argument parsing + dispatch
+|   |-- config.py             # .threadcheckignore + pyproject.toml loader
+|   |-- pytest_plugin.py      # --threadcheck flag for pytest
+|   |-- static/
+|   |   |-- analyzer.py       # static analysis entry point
+|   |   |-- visitors.py       # 5 AST visitors
+|   |   |-- lock_tracker.py   # lock usage analysis
+|   |   \-- models.py         # RaceWarning, Severity, Confidence
+|   |-- dynamic/
+|   |   |-- __main__.py       # run_script entry point
+|   |   |-- transform.py      # AST transformation engine
+|   |   |-- tracker.py        # runtime tracker with vector clocks
+|   |   |-- clock.py          # vector clock implementation
+|   |   \-- hook.py           # sys.meta_path import hook
+|   |-- compat/
+|   |   |-- checker.py        # C extension FT tag scanner
+|   |   \-- models.py         # FTCompatResult, CompatStatus
+|   \-- reporting/
+|       |-- formatter.py      # terminal / JSON output
+|       |-- sarif.py          # SARIF v2.1.0 output
+|       \-- html.py           # HTML report output
+|-- tests/
+|   |-- fixtures/             # 11 fixture files with known races
+|   |-- test_static_analyzer.py
+|   |-- test_dynamic_detector.py
+|   |-- test_formatter.py
+|   |-- test_sarif.py
+|   |-- test_compat.py
+|   |-- test_config.py
+|   \-- test_pytest_plugin.py
+|-- demo/
+|   |-- race_example.py       # sample with intentional races
+|   \-- run_demo.py           # demo runner for all output formats
+\-- README.md
 ```
 
 ---
