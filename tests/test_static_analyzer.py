@@ -146,3 +146,30 @@ def test_executor_submit_target_detected():
     )
     unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
     assert all(w.confidence == Confidence.HIGH for w in unsafe)
+
+
+def test_inline_ignore_suppresses_line():
+    """# threadcheck: ignore on a line should suppress that warning."""
+    warnings = analyze_file(FIXTURES / "inline_ignore.py")
+    unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    unsafe_lines = {w.line for w in unsafe}
+    assert 9 not in unsafe_lines, "Line with `# threadcheck: ignore` was not suppressed"
+    assert 20 in unsafe_lines, "Line without ignore was incorrectly suppressed"
+
+
+def test_protected_by_manual_lock():
+    """lock.acquire()/release() should suppress UNSAFE_GLOBAL between them."""
+    warnings = analyze_file(FIXTURES / "manual_lock.py")
+    unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    unsafe_lines = {w.line for w in unsafe}
+    assert 10 not in unsafe_lines, "Line inside manual acquire/release was not protected"
+    assert 16 in unsafe_lines, "Line outside lock was incorrectly protected"
+
+
+def test_inline_ignore_region():
+    """# threadcheck: ignore-start/ignore-end should suppress all lines in range."""
+    warnings = analyze_file(FIXTURES / "inline_ignore.py")
+    unsafe = [w for w in warnings if w.category == WarningCategory.UNSAFE_GLOBAL]
+    unsafe_lines = {w.line for w in unsafe}
+    assert 26 not in unsafe_lines, "Line inside ignore region was not suppressed"
+    assert 32 in unsafe_lines, "Line after ignore region was incorrectly suppressed"

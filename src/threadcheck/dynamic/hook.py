@@ -1,6 +1,5 @@
 import sys
 import ast
-import builtins
 import importlib.util
 import importlib.abc
 from pathlib import Path
@@ -31,7 +30,6 @@ class ThreadCheckLoader(importlib.abc.Loader):
         code = compile(tree, spec.origin, "exec")
         globals_dict = module.__dict__
         globals_dict["_threadcheck_tracker"] = self.tracker
-        builtins._threadcheck_tracker = self.tracker
         exec(code, globals_dict)
 
     @staticmethod

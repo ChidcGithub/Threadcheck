@@ -156,3 +156,34 @@ def test_name_main_guard_executes():
         f"Output:\n{output}"
     )
     assert "Result:" in output, "Script with __name__ guard did not execute (Result: not found)"
+
+
+def test_transform_injects_write_before_for_subscript():
+    source = (FIXTURES / "dynamic_subscript_race.py").read_text(encoding="utf-8")
+    result = transform_source(source, str(FIXTURES / "dynamic_subscript_race.py"))
+    assert "_threadcheck_tracker.write_before" in result
+
+
+def test_subscript_race_detected():
+    count, stdout, stderr = _run_transformed_fixture("dynamic_subscript_race.py")
+    assert count > 0, (
+        f"Expected races > 0 for subscript race, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )
+
+
+def test_executor_submit_race_detected():
+    count, stdout, stderr = _run_transformed_fixture("futures_race.py")
+    assert count > 0, (
+        f"Expected races > 0 for executor.submit, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )
+
+
+def test_no_false_positive_closure_lock():
+    """Closure with lock-protected shared variable should NOT report races."""
+    count, stdout, stderr = _run_transformed_fixture("closure_lock_safe.py")
+    assert count == 0, (
+        f"Expected 0 races for closure with lock, got {count}\n"
+        f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    )

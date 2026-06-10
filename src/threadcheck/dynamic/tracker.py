@@ -25,6 +25,12 @@ class ThreadCheckTracker:
     @classmethod
     def start(cls):
         cls._active = True
+        tid = _current_tid()
+        with cls._lock:
+            cls._main_tid = tid
+            if tid not in cls._thread_clocks:
+                cls._thread_clocks[tid] = VectorClock()
+            cls._thread_clocks[tid].tick(tid)
 
     @classmethod
     def stop(cls):
@@ -33,11 +39,14 @@ class ThreadCheckTracker:
     @classmethod
     def _get_clock(cls) -> tuple[VectorClock, int]:
         tid = _current_tid()
-        if tid not in cls._thread_clocks:
-            with cls._lock:
-                if tid not in cls._thread_clocks:
-                    cls._thread_clocks[tid] = VectorClock()
-        return cls._thread_clocks[tid], tid
+        with cls._lock:
+            if tid not in cls._thread_clocks:
+                new_clock = VectorClock()
+                main_tid = getattr(cls, '_main_tid', None)
+                if main_tid is not None and main_tid in cls._thread_clocks:
+                    new_clock.merge(cls._thread_clocks[main_tid])
+                cls._thread_clocks[tid] = new_clock
+            return cls._thread_clocks[tid], tid
 
     @classmethod
     def write_before(cls, var_name: str, file: str = "", line: int = 0):

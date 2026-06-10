@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,16 @@ from .visitors import (
     ThreadVisitor,
     SharedMutableVisitor,
     ClassAttributeVisitor,
+)
+
+_INLINE_IGNORE_RE = re.compile(
+    r"#\s*threadcheck:\s*ignore\b(?!-start\b)(?!-end\b)", re.IGNORECASE
+)
+_INLINE_IGNORE_START_RE = re.compile(
+    r"#\s*threadcheck:\s*ignore-start\b", re.IGNORECASE
+)
+_INLINE_IGNORE_END_RE = re.compile(
+    r"#\s*threadcheck:\s*ignore-end\b", re.IGNORECASE
 )
 
 if TYPE_CHECKING:
@@ -61,6 +72,36 @@ class AnalysisContext:
                         self._thread_targets.add(args[0].id)
 
 
+def _get_inline_ignored_lines(source: str) -> set[int]:
+    lines = source.splitlines()
+    ignored: set[int] = set()
+    region_active = False
+    region_start = 0
+
+    for i, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if _INLINE_IGNORE_END_RE.search(stripped):
+            if region_active:
+                for j in range(region_start, i + 1):
+                    ignored.add(j)
+                region_active = False
+            continue
+        if _INLINE_IGNORE_START_RE.search(stripped):
+            region_active = True
+            region_start = i
+            continue
+        if region_active:
+            continue
+        if _INLINE_IGNORE_RE.search(stripped):
+            ignored.add(i)
+
+    if region_active:
+        for j in range(region_start, len(lines) + 1):
+            ignored.add(j)
+
+    return ignored
+
+
 def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None, config: ThreadCheckConfig | None = None) -> list[RaceWarning]:
     try:
         source = filepath.read_text(encoding="utf-8")
@@ -86,6 +127,10 @@ def analyze_file(filepath: Path, global_thread_targets: set[str] | None = None, 
         visitor = visitor_cls(filepath, context)
         visitor.visit(tree)
         all_warnings.extend(visitor.warnings)
+
+    if all_warnings:
+        ignored_lines = _get_inline_ignored_lines(source)
+        all_warnings = [w for w in all_warnings if w.line not in ignored_lines]
 
     if config is not None:
         root = config.project_root if hasattr(config, 'project_root') else filepath.parent
@@ -131,7 +176,8 @@ def analyze_path(path: str, config: ThreadCheckConfig | None = None) -> list[Rac
     if p.is_file():
         if p.suffix == ".py":
             if config is None or not config.should_ignore_file(p, root):
-                all_warnings.extend(analyze_file(p, config=config))
+                global_targets = _collect_thread_targets([p])
+                all_warnings.extend(analyze_file(p, global_targets, config=config))
     elif p.is_dir():
         py_files = [f for f in sorted(p.rglob("*.py")) if not _should_skip(f, config, root)]
         global_targets = _collect_thread_targets(py_files)

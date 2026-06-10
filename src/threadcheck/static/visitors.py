@@ -137,6 +137,7 @@ class ThreadVisitor(ast.NodeVisitor):
         self.filepath = filepath
         self.context = context
         self.warnings: list[RaceWarning] = []
+        self._seen_targets: set[str | None] = set()
 
     def visit_Call(self, node):
         if isinstance(node.func, ast.Attribute) and node.func.attr == "Thread":
@@ -150,6 +151,9 @@ class ThreadVisitor(ast.NodeVisitor):
                             target = "<lambda>"
                         elif isinstance(kw.value, ast.Attribute):
                             target = ast.unparse(kw.value)
+                if target in self._seen_targets:
+                    return
+                self._seen_targets.add(target)
                 label = f" (target={target})" if target else ""
                 self.warnings.append(
                     RaceWarning(
@@ -313,7 +317,11 @@ class ClassAttributeVisitor(ast.NodeVisitor):
 
 
 def _is_mutable_literal(node):
-    return isinstance(node, (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.SetComp, ast.DictComp))
+    if isinstance(node, (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.SetComp, ast.DictComp)):
+        return True
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id in {"list", "set", "dict"}
+    return False
 
 
 def _is_name_or_attr(node, name: str) -> bool:

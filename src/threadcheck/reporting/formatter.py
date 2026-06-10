@@ -148,7 +148,10 @@ def _get_source_snippet(filepath: str, line: int, context: int = 2) -> list[str]
 
 def _can_print_emoji() -> bool:
     try:
-        "\u2716".encode(sys.stdout.encoding)
+        enc = sys.stdout.encoding
+        if enc is None:
+            return False
+        "\u2716".encode(enc)
         return True
     except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
         return False
@@ -172,6 +175,10 @@ def format_dynamic_races(
                                 key = _race_key(r1, r2)
                                 overlap[key] += 1
 
+    can_emoji = _can_print_emoji()
+    TEE = "\u251c\u2500" if can_emoji else "|-"
+    LAST = "\u2514\u2500" if can_emoji else "`-"
+
     lines: list[str] = [
         _s("red", _s("bold", "Data races detected:")) if _COLOR else "Data races detected:",
         "",
@@ -186,17 +193,17 @@ def format_dynamic_races(
 
         lines.append(f"{marker} {_s('bold', f'`{var_name}`')}")
         lines.append(
-            f"  {'├─' if count > 0 else '└─'} "
+            f"  {TEE if count > 0 else LAST} "
             f"Thread-{r1.thread_id} ({_s('magenta', r1.operation)}) "
             f"at {f1}:{l1}"
         )
         lines.append(
-            f"  {'├─' if count > 1 else '└─'} "
+            f"  {TEE if count > 1 else LAST} "
             f"Thread-{r2.thread_id} ({_s('magenta', r2.operation)}) "
             f"at {f2}:{l2}"
         )
         lines.append(
-            f"  └─ No happens-before relationship between accesses"
+            f"  {LAST} No happens-before relationship between accesses"
         )
         if count > 1:
             lines.append(f"     ({count} overlapping accesses)")

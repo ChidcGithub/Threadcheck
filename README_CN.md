@@ -329,7 +329,7 @@ threadcheck/
 
 ## 路线图
 
-- **v0.0.1.2a1**（当前版本）：Round A（核心缺陷修复）+ Round B（开发者体验）— 静态+动态分析、锁追踪、跨模块分析、pytest 插件、FT 兼容检查、HTML 报告、配置文件、增强输出
+- **v0.0.1.2**（当前版本）：Round A（核心缺陷修复）+ Round B（开发者体验）— 静态+动态分析、锁追踪、跨模块分析、pytest 插件、FT 兼容检查、HTML 报告、配置文件、增强输出
 - **v0.2.0**（下一版本）：Round C — `Thread.join()` happens-before、`threading.Atomic` 支持、函数调用链追踪、死锁检测
 - **v1.0.0**（未来）：Round D — GitHub Action、pre-commit hook、VS Code 集成、稳定 API
 

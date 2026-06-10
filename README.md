@@ -322,7 +322,7 @@ Thread IDs: uses `native_id` (gettid) on Linux/macOS, `threading.get_ident()` on
 
 ## Roadmap
 
-- **v0.0.1.2a1** (current): Round A (core gap fill) + Round B (DX) -- static and dynamic analysis, lock tracking, cross-module analysis, pytest plugin, FT compat checker, HTML reports, configuration, enhanced output
+- **v0.0.1.2** (current): Round A (core gap fill) + Round B (DX) -- static and dynamic analysis, lock tracking, cross-module analysis, pytest plugin, FT compat checker, HTML reports, configuration, enhanced output
 - **v0.2.0** (next): Round C -- `Thread.join()` happens-before, `threading.Atomic` support, function call chain tracking, deadlock detection
 - **v1.0.0** (future): Round D -- GitHub Action, pre-commit hook, VS Code integration, stable API
 

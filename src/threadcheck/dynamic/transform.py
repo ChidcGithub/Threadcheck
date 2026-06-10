@@ -70,33 +70,24 @@ class TrackInjector:
                 new.append(_make_read_before(name, self.filename, stmt.lineno))
 
             if isinstance(stmt, ast.Assign):
-                targets = [
-                    t
-                    for t in stmt.targets
-                    if isinstance(t, ast.Name) and t.id in shared
-                ]
-                for t in targets:
-                    new.append(_make_write_before(t.id, self.filename, stmt.lineno))
+                targets = _collect_assign_target_names(stmt, shared)
+                for name in targets:
+                    new.append(_make_write_before(name, self.filename, stmt.lineno))
                 new.append(stmt)
 
             elif isinstance(stmt, ast.AugAssign):
-                if isinstance(stmt.target, ast.Name) and stmt.target.id in shared:
+                target_name = _extract_assign_target_name(stmt.target, shared)
+                if target_name is not None:
                     new.append(
-                        _make_write_before(
-                            stmt.target.id, self.filename, stmt.lineno
-                        )
+                        _make_write_before(target_name, self.filename, stmt.lineno)
                     )
                 new.append(stmt)
 
             elif isinstance(stmt, ast.Delete):
-                targets = [
-                    t
-                    for t in stmt.targets
-                    if isinstance(t, ast.Name) and t.id in shared
-                ]
-                for t in targets:
+                target_names = _collect_delete_target_names(stmt, shared)
+                for name in target_names:
                     new.append(
-                        _make_write_before(t.id, self.filename, stmt.lineno)
+                        _make_write_before(name, self.filename, stmt.lineno)
                     )
                 new.append(stmt)
 
@@ -122,15 +113,18 @@ def _find_read_names(stmt: ast.AST, shared_set: set[str]) -> set[str]:
     write_targets: set[str] = set()
     if isinstance(stmt, ast.Assign):
         for t in stmt.targets:
-            if isinstance(t, ast.Name) and t.id in shared_set:
-                write_targets.add(t.id)
+            name = _extract_assign_target_name(t, shared_set)
+            if name is not None:
+                write_targets.add(name)
     elif isinstance(stmt, ast.AugAssign):
-        if isinstance(stmt.target, ast.Name) and stmt.target.id in shared_set:
-            write_targets.add(stmt.target.id)
+        name = _extract_assign_target_name(stmt.target, shared_set)
+        if name is not None:
+            write_targets.add(name)
     elif isinstance(stmt, ast.Delete):
         for t in stmt.targets:
-            if isinstance(t, ast.Name) and t.id in shared_set:
-                write_targets.add(t.id)
+            name = _extract_assign_target_name(t, shared_set)
+            if name is not None:
+                write_targets.add(name)
 
     reads: set[str] = set()
     _collect_read_names(stmt, shared_set, reads)
@@ -224,6 +218,32 @@ def _make_lock_release(lock_name: str, filename: str, lineno: int) -> ast.Expr:
             keywords=[],
         ),
     )
+
+
+def _collect_assign_target_names(stmt: ast.Assign, shared: set[str]) -> list[str]:
+    names: list[str] = []
+    for t in stmt.targets:
+        name = _extract_assign_target_name(t, shared)
+        if name is not None:
+            names.append(name)
+    return names
+
+
+def _extract_assign_target_name(t: ast.AST, shared: set[str]) -> str | None:
+    if isinstance(t, ast.Name) and t.id in shared:
+        return t.id
+    if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name) and t.value.id in shared:
+        return t.value.id
+    return None
+
+
+def _collect_delete_target_names(stmt: ast.Delete, shared: set[str]) -> list[str]:
+    names: list[str] = []
+    for t in stmt.targets:
+        name = _extract_assign_target_name(t, shared)
+        if name is not None:
+            names.append(name)
+    return names
 
 
 def _resolve_lock_names(with_stmt: ast.With) -> list[str]:
